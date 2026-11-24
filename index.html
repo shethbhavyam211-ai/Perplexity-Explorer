@@ -1,0 +1,3755 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Perplexity Explorer</title>
+  
+  <!-- Google Fonts: Space Grotesk (Text/Headings) & JetBrains Mono (Numbers/Code) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    /* ==========================================================================
+       CSS Variables & Design Tokens
+       ========================================================================== */
+    :root {
+      /* Colors */
+      --bg-dark: #07090e;
+      --bg-card: rgba(18, 22, 36, 0.65);
+      --bg-card-hover: rgba(26, 32, 53, 0.75);
+      --border-glass: rgba(255, 255, 255, 0.08);
+      --border-glass-glow: rgba(168, 85, 247, 0.35);
+      
+      /* Neon Accents (Purple to Cyan) */
+      --neon-purple: #a855f7;
+      --neon-violet: #8b5cf6;
+      --neon-indigo: #6366f1;
+      --neon-cyan: #06b6d4;
+      --neon-glow-cyan: #22d3ee;
+      --gradient-primary: linear-gradient(135deg, #a855f7 0%, #6366f1 50%, #06b6d4 100%);
+      --gradient-text: linear-gradient(135deg, #c084fc 0%, #818cf8 45%, #22d3ee 100%);
+      --gradient-border: linear-gradient(135deg, rgba(168, 85, 247, 0.6), rgba(6, 182, 212, 0.6));
+      
+      /* Typography */
+      --font-main: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+      
+      /* Text Colors */
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+
+      /* UI Metrics */
+      --nav-height: 72px;
+      --radius-sm: 8px;
+      --radius-md: 16px;
+      --radius-lg: 24px;
+      --radius-full: 9999px;
+    }
+
+    /* ==========================================================================
+       Reset & Base Styles
+       ========================================================================== */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      scroll-behavior: smooth;
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      font-family: var(--font-main);
+      overflow-x: hidden;
+    }
+
+    body {
+      min-height: 100vh;
+      line-height: 1.6;
+      position: relative;
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Numbers & mono code elements */
+    .mono-num, code, pre, .stat-value, .token-prob {
+      font-family: var(--font-mono);
+      font-feature-settings: "tnum" 1, "zero" 1;
+    }
+
+    /* Ambient Background Glow Mesh with Slow Floating Blobs */
+    .ambient-glow {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      overflow: hidden;
+    }
+
+    @keyframes floatBlob1 {
+      0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+      33% { transform: translate3d(80px, 60px, 0) scale(1.1); }
+      66% { transform: translate3d(-40px, 90px, 0) scale(0.95); }
+    }
+
+    @keyframes floatBlob2 {
+      0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+      33% { transform: translate3d(-70px, -60px, 0) scale(0.92); }
+      66% { transform: translate3d(50px, -40px, 0) scale(1.08); }
+    }
+
+    .ambient-glow::before {
+      content: '';
+      position: absolute;
+      width: 600px;
+      height: 600px;
+      top: -150px;
+      left: 15%;
+      background: radial-gradient(circle, rgba(168, 85, 247, 0.18) 0%, rgba(168, 85, 247, 0) 70%);
+      filter: blur(80px);
+      border-radius: 50%;
+      will-change: transform;
+      transform: translate3d(0, 0, 0);
+      animation: floatBlob1 24s ease-in-out infinite alternate;
+    }
+
+    .ambient-glow::after {
+      content: '';
+      position: absolute;
+      width: 650px;
+      height: 650px;
+      bottom: 10%;
+      right: 10%;
+      background: radial-gradient(circle, rgba(6, 182, 212, 0.15) 0%, rgba(6, 182, 212, 0) 70%);
+      filter: blur(90px);
+      border-radius: 50%;
+      will-change: transform;
+      transform: translate3d(0, 0, 0);
+      animation: floatBlob2 28s ease-in-out infinite alternate;
+    }
+
+    /* Custom Animated Cursor Glow */
+    .cursor-glow {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 480px;
+      height: 480px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(6, 182, 212, 0.12) 0%, rgba(168, 85, 247, 0.08) 40%, transparent 70%);
+      pointer-events: none;
+      transform: translate3d(-50%, -50%, 0);
+      z-index: 1;
+      filter: blur(35px);
+      opacity: 0;
+      transition: opacity 0.4s ease;
+      will-change: transform;
+    }
+
+    /* Toast Notification System */
+    .toast-container {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 100005;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      pointer-events: none;
+    }
+
+    .toast-pill {
+      background: rgba(14, 18, 32, 0.92);
+      border: 1px solid var(--neon-cyan);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5), 0 0 15px rgba(6, 182, 212, 0.25);
+      padding: 10px 18px;
+      border-radius: var(--radius-full);
+      color: #f8fafc;
+      font-size: 0.85rem;
+      font-family: var(--font-main);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      animation: toastIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      pointer-events: auto;
+    }
+
+    .toast-pill.toast-exit {
+      animation: toastOut 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateY(16px) scale(0.95); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    @keyframes toastOut {
+      from { opacity: 1; transform: translateY(0) scale(1); }
+      to { opacity: 0; transform: translateY(16px) scale(0.95); }
+    }
+
+    /* Background Subtle Grid Pattern */
+    .grid-overlay {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 1;
+      background-image: 
+        linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+      background-size: 48px 48px;
+      mask-image: radial-gradient(ellipse at center, black 40%, transparent 80%);
+      -webkit-mask-image: radial-gradient(ellipse at center, black 40%, transparent 80%);
+    }
+
+    /* ==========================================================================
+       Scroll Progress Bar (Top)
+       ========================================================================== */
+    #scroll-progress-container {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 3px;
+      background: transparent;
+      z-index: 10001;
+    }
+
+    #scroll-progress-bar {
+      height: 100%;
+      width: 0%;
+      background: var(--gradient-primary);
+      box-shadow: 0 0 12px var(--neon-cyan), 0 0 20px var(--neon-purple);
+      transition: width 0.08s ease-out;
+    }
+
+    /* ==========================================================================
+       Full-Screen Launch Animation Overlay
+       ========================================================================== */
+    #launch-overlay {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      background: radial-gradient(circle at center, #111424 0%, #06070a 100%);
+      z-index: 99999;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      transition: transform 0.85s cubic-bezier(0.85, 0, 0.15, 1), opacity 0.85s ease;
+    }
+
+    #launch-overlay.slide-up {
+      transform: translateY(-100%);
+      pointer-events: none;
+    }
+
+    /* Floating Tokens Container */
+    .token-cloud {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+
+    .floating-token {
+      position: absolute;
+      padding: 6px 14px;
+      border-radius: var(--radius-full);
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      color: var(--neon-glow-cyan);
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      letter-spacing: 0.5px;
+      box-shadow: 0 0 20px rgba(6, 182, 212, 0.12);
+      animation: floatMotion 8s ease-in-out infinite alternate;
+      white-space: nowrap;
+      user-select: none;
+    }
+
+    @keyframes floatMotion {
+      0% {
+        transform: translateY(0) rotate(0deg) scale(0.95);
+        opacity: 0.4;
+      }
+      50% {
+        opacity: 0.85;
+      }
+      100% {
+        transform: translateY(-40px) rotate(6deg) scale(1.05);
+        opacity: 0.5;
+      }
+    }
+
+    /* Central Glowing PPL Logo */
+    .launch-centerpiece {
+      position: relative;
+      z-index: 2;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      animation: logoEntrance 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    .ppl-glow-badge {
+      width: 120px;
+      height: 120px;
+      border-radius: 32px;
+      background: linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(6, 182, 212, 0.15));
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      box-shadow: 
+        0 0 40px rgba(168, 85, 247, 0.4),
+        0 0 80px rgba(6, 182, 212, 0.25),
+        inset 0 0 20px rgba(255, 255, 255, 0.15);
+      margin-bottom: 24px;
+      animation: pulseGlow 2.5s ease-in-out infinite alternate;
+    }
+
+    @keyframes pulseGlow {
+      0% {
+        box-shadow: 0 0 35px rgba(168, 85, 247, 0.35), 0 0 70px rgba(6, 182, 212, 0.2);
+        transform: scale(0.98);
+      }
+      100% {
+        box-shadow: 0 0 60px rgba(168, 85, 247, 0.65), 0 0 100px rgba(6, 182, 212, 0.4);
+        transform: scale(1.04);
+      }
+    }
+
+    .ppl-glow-badge h1 {
+      font-size: 2.8rem;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      letter-spacing: 2px;
+      background: var(--gradient-text);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      filter: drop-shadow(0 2px 8px rgba(168, 85, 247, 0.5));
+    }
+
+    .launch-title {
+      font-size: 1.8rem;
+      font-weight: 600;
+      letter-spacing: -0.5px;
+      margin-bottom: 8px;
+      color: var(--text-main);
+    }
+
+    .launch-subtitle {
+      font-size: 0.95rem;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      margin-bottom: 24px;
+    }
+
+    .skip-intro-btn {
+      padding: 8px 20px;
+      font-size: 0.85rem;
+      font-family: var(--font-mono);
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: var(--radius-full);
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.25s ease;
+    }
+
+    .skip-intro-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--text-main);
+      border-color: var(--neon-cyan);
+    }
+
+    @keyframes logoEntrance {
+      0% {
+        opacity: 0;
+        transform: scale(0.85) translateY(20px);
+      }
+      100% {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+      }
+    }
+
+    /* ==========================================================================
+       Sticky Navigation Bar
+       ========================================================================== */
+    .sticky-header {
+      position: sticky;
+      top: 0;
+      width: 100%;
+      height: var(--nav-height);
+      background: rgba(7, 9, 14, 0.75);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border-glass);
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      transition: background-color 0.3s ease, border-color 0.3s ease;
+    }
+
+    .nav-container {
+      max-width: 1200px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .brand-logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      color: var(--text-main);
+    }
+
+    .brand-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: var(--gradient-primary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-mono);
+      font-weight: 700;
+      font-size: 0.95rem;
+      color: #fff;
+      box-shadow: 0 0 15px rgba(168, 85, 247, 0.5);
+    }
+
+    .brand-text {
+      font-size: 1.15rem;
+      font-weight: 600;
+      letter-spacing: -0.3px;
+    }
+
+    .brand-text span {
+      background: var(--gradient-text);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 32px;
+      list-style: none;
+    }
+
+    .nav-link {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 0.95rem;
+      font-weight: 500;
+      transition: color 0.25s ease;
+      position: relative;
+      padding: 6px 0;
+    }
+
+    .nav-link::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 0%;
+      height: 2px;
+      background: var(--gradient-primary);
+      transition: width 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 0 8px var(--neon-cyan);
+    }
+
+    .nav-link:hover,
+    .nav-link.active {
+      color: var(--text-main);
+    }
+
+    .nav-link:hover::after,
+    .nav-link.active::after {
+      width: 100%;
+    }
+
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    /* Mobile Hamburger */
+    .mobile-menu-toggle {
+      display: none;
+      background: transparent;
+      border: none;
+      color: var(--text-main);
+      cursor: pointer;
+      padding: 8px;
+    }
+
+    /* ==========================================================================
+       Interactive Button Styles (Hover Glow, Press-scale, Ripple)
+       ========================================================================== */
+    .btn {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 12px 24px;
+      font-family: var(--font-main);
+      font-size: 0.95rem;
+      font-weight: 600;
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      text-decoration: none;
+      border: 1px solid transparent;
+      overflow: hidden;
+      transition: 
+        transform 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275),
+        box-shadow 0.3s ease,
+        background-color 0.3s ease,
+        border-color 0.3s ease;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* Press-scale effect */
+    .btn:active {
+      transform: scale(0.96) !important;
+    }
+
+    /* Primary Neon Gradient Button */
+    .btn-primary {
+      background: var(--gradient-primary);
+      color: #ffffff;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      box-shadow: 0 4px 16px rgba(168, 85, 247, 0.25);
+    }
+
+    .btn-primary:hover {
+      box-shadow: 
+        0 0 25px rgba(6, 182, 212, 0.45),
+        0 0 45px rgba(168, 85, 247, 0.35);
+      border-color: rgba(255, 255, 255, 0.4);
+    }
+
+    /* Glass Neon Outline Button */
+    .btn-glass {
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text-main);
+      border: 1px solid var(--border-glass-glow);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+
+    .btn-glass:hover {
+      background: rgba(255, 255, 255, 0.09);
+      border-color: var(--neon-cyan);
+      box-shadow: 0 0 20px rgba(6, 182, 212, 0.3);
+      color: #ffffff;
+    }
+
+    /* Button Ripple Element */
+    .ripple {
+      position: absolute;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.45);
+      transform: scale(0);
+      animation: rippleEffect 0.6s linear;
+      pointer-events: none;
+    }
+
+    @keyframes rippleEffect {
+      to {
+        transform: scale(4);
+        opacity: 0;
+      }
+    }
+
+    /* ==========================================================================
+       Layout & Glassmorphism Cards
+       ========================================================================== */
+    .page-container {
+      position: relative;
+      z-index: 2;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 40px 24px 100px;
+    }
+
+    /* Hero Banner Area */
+    .hero-section {
+      text-align: center;
+      padding: 60px 0 80px;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 16px;
+      border-radius: var(--radius-full);
+      background: rgba(168, 85, 247, 0.1);
+      border: 1px solid rgba(168, 85, 247, 0.3);
+      color: #d8b4fe;
+      font-size: 0.85rem;
+      font-weight: 500;
+      margin-bottom: 24px;
+      backdrop-filter: blur(8px);
+    }
+
+    .hero-badge-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--neon-cyan);
+      box-shadow: 0 0 8px var(--neon-cyan);
+    }
+
+    .hero-title {
+      font-size: clamp(2.5rem, 5vw, 4rem);
+      font-weight: 700;
+      letter-spacing: -1px;
+      line-height: 1.15;
+      margin-bottom: 20px;
+    }
+
+    .hero-title span {
+      background: var(--gradient-text);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .hero-desc {
+      font-size: 1.15rem;
+      color: var(--text-muted);
+      margin-bottom: 32px;
+      max-width: 640px;
+      margin-inline: auto;
+    }
+
+    .hero-cta {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    /* Main Sections */
+    .explorer-section {
+      padding: 90px 0;
+      scroll-margin-top: var(--nav-height);
+    }
+
+    .section-header {
+      margin-bottom: 40px;
+      position: relative;
+    }
+
+    .section-tag {
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: var(--neon-cyan);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .section-tag::before {
+      content: '//';
+      color: var(--neon-purple);
+    }
+
+    .section-title {
+      font-size: 2.2rem;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      color: var(--text-main);
+      margin-bottom: 12px;
+      position: relative;
+      display: inline-block;
+      background: linear-gradient(90deg, #ffffff 0%, #cbd5e1 50%, #67e8f9 100%);
+      background-size: 200% auto;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      animation: titleShimmer 8s linear infinite;
+    }
+
+    @keyframes titleShimmer {
+      to { background-position: 200% center; }
+    }
+
+    /* Enhanced Focus Rings & Micro-interactions */
+    .try-input:focus-visible,
+    .calc-textarea:focus-visible,
+    .btn:focus-visible,
+    .stepper-tab:focus-visible {
+      outline: 2px solid var(--neon-cyan);
+      outline-offset: 3px;
+      box-shadow: 0 0 16px rgba(6, 182, 212, 0.45);
+    }
+
+    .try-input,
+    .calc-textarea {
+      transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.2s ease;
+    }
+
+    .try-input:hover:not(:focus),
+    .calc-textarea:hover:not(:focus) {
+      border-color: rgba(255, 255, 255, 0.22);
+      transform: translateY(-1px);
+    }
+
+    .btn:hover {
+      transform: translateY(-1px);
+    }
+
+    .btn:active {
+      transform: translateY(0) scale(0.96) !important;
+    }
+
+    .stepper-tab:hover {
+      transform: translateY(-2px);
+    }
+
+    .section-subtitle {
+      font-size: 1.05rem;
+      color: var(--text-muted);
+      max-width: 640px;
+    }
+
+    /* Glass Cards */
+    .glass-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-glass);
+      border-radius: var(--radius-lg);
+      padding: 32px;
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      box-shadow: 
+        0 12px 36px 0 rgba(0, 0, 0, 0.4),
+        inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
+      position: relative;
+      overflow: hidden;
+      transition: 
+        transform 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+        border-color 0.35s ease,
+        box-shadow 0.35s ease;
+    }
+
+    .glass-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent);
+    }
+
+    .glass-card:hover {
+      border-color: var(--border-glass-glow);
+      box-shadow: 
+        0 16px 40px rgba(0, 0, 0, 0.5),
+        0 0 25px rgba(168, 85, 247, 0.15);
+      transform: translateY(-3px);
+    }
+
+    /* Grid Layouts */
+    .card-grid-3 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 24px;
+    }
+
+    .card-grid-2 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+      gap: 24px;
+    }
+
+    /* ==========================================================================
+       Intersection Observer Animation Classes
+       ========================================================================== */
+    .reveal-card {
+      opacity: 0;
+      transform: translateY(35px);
+      transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1), transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+      will-change: opacity, transform;
+    }
+
+    .reveal-card.is-visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* ==========================================================================
+       Section 1: Calculate (id="calc")
+       ========================================================================== */
+    .calc-card-container {
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .calc-textarea {
+      width: 100%;
+      min-height: 110px;
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid var(--border-glass);
+      border-radius: var(--radius-md);
+      padding: 16px 20px;
+      color: var(--text-main);
+      font-family: var(--font-main);
+      font-size: 1.05rem;
+      line-height: 1.6;
+      resize: vertical;
+      outline: none;
+      transition: border-color 0.25s ease, box-shadow 0.25s ease;
+    }
+
+    .calc-textarea:focus {
+      border-color: var(--neon-cyan);
+      box-shadow: 0 0 20px rgba(6, 182, 212, 0.25);
+    }
+
+    /* Model Download Progress Bar */
+    .model-progress-panel {
+      margin-top: 16px;
+      padding: 16px 20px;
+      background: rgba(168, 85, 247, 0.08);
+      border: 1px solid rgba(168, 85, 247, 0.25);
+      border-radius: var(--radius-md);
+      display: none;
+    }
+
+    .model-progress-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      font-size: 0.9rem;
+    }
+
+    .model-progress-text {
+      color: #e9d5ff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .model-progress-percent {
+      font-family: var(--font-mono);
+      font-weight: 700;
+      color: var(--neon-glow-cyan);
+    }
+
+    .model-progress-track {
+      width: 100%;
+      height: 8px;
+      background: rgba(0, 0, 0, 0.5);
+      border-radius: var(--radius-full);
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .model-progress-fill {
+      width: 0%;
+      height: 100%;
+      background: var(--gradient-primary);
+      box-shadow: 0 0 10px var(--neon-cyan);
+      transition: width 0.2s ease-out;
+    }
+
+    /* Loading Shimmer Animation */
+    @keyframes calcShimmer {
+      0% {
+        background-position: -200% 0;
+      }
+      100% {
+        background-position: 200% 0;
+      }
+    }
+
+    .shimmer-active {
+      position: relative;
+      overflow: hidden;
+    }
+
+    .shimmer-active::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(
+        90deg, 
+        transparent 0%, 
+        rgba(168, 85, 247, 0.12) 25%, 
+        rgba(6, 182, 212, 0.18) 50%, 
+        rgba(168, 85, 247, 0.12) 75%, 
+        transparent 100%
+      );
+      background-size: 200% 100%;
+      animation: calcShimmer 1.8s infinite linear;
+      pointer-events: none;
+      border-radius: inherit;
+    }
+
+    /* Results Showcase */
+    .calc-results-area {
+      display: none;
+      margin-top: 28px;
+      padding-top: 28px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      animation: fadeInUp 0.5s ease-out forwards;
+    }
+
+    @keyframes fadeInUp {
+      from {
+        opacity: 0;
+        transform: translateY(12px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .ppl-display-hero {
+      text-align: center;
+      padding: 24px;
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: var(--radius-md);
+      margin-bottom: 24px;
+      position: relative;
+    }
+
+    .ppl-hero-title {
+      font-size: 0.85rem;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+
+    .ppl-counter-value {
+      font-family: var(--font-mono);
+      font-size: clamp(3rem, 7vw, 4.5rem);
+      font-weight: 700;
+      line-height: 1;
+      background: var(--gradient-text);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      filter: drop-shadow(0 0 25px rgba(6, 182, 212, 0.4));
+      margin-bottom: 8px;
+      display: inline-block;
+    }
+
+    .ppl-hero-subtitle {
+      font-size: 0.95rem;
+      color: var(--neon-cyan);
+      font-family: var(--font-mono);
+    }
+
+    /* Token Chips & Probabilities */
+    .token-chip-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+
+    .token-legend {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 0.75rem;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .legend-color-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+
+    .tokens-wrapper {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      padding: 20px;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: var(--radius-md);
+      min-height: 90px;
+      align-items: center;
+    }
+
+    .calc-token-chip {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: var(--radius-sm);
+      font-family: var(--font-mono);
+      font-size: 0.95rem;
+      cursor: help;
+      transition: transform 0.15s ease, box-shadow 0.2s ease;
+      white-space: pre-wrap;
+      user-select: none;
+    }
+
+    .calc-token-chip:hover {
+      transform: translateY(-2px);
+      z-index: 10;
+    }
+
+    /* Custom Tooltip */
+    .calc-token-chip .token-tooltip {
+      visibility: hidden;
+      opacity: 0;
+      position: absolute;
+      bottom: calc(100% + 10px);
+      left: 50%;
+      transform: translateX(-50%) translateY(4px);
+      background: rgba(11, 14, 25, 0.95);
+      border: 1px solid var(--border-glass-glow);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      padding: 8px 12px;
+      border-radius: 8px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+      font-size: 0.75rem;
+      white-space: nowrap;
+      pointer-events: none;
+      transition: all 0.2s ease;
+      z-index: 20;
+      color: #f1f5f9;
+      text-align: left;
+      line-height: 1.4;
+    }
+
+    .calc-token-chip .token-tooltip::after {
+      content: '';
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      border-width: 5px;
+      border-style: solid;
+      border-color: rgba(11, 14, 25, 0.95) transparent transparent transparent;
+    }
+
+    .calc-token-chip:hover .token-tooltip {
+      visibility: visible;
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* Friendly Error Box */
+    .calc-error-banner {
+      display: none;
+      margin-top: 16px;
+      padding: 16px 20px;
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      border-radius: var(--radius-md);
+      color: #fca5a5;
+      font-size: 0.9rem;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .formula-display {
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: var(--radius-md);
+      padding: 24px;
+      text-align: center;
+      margin: 20px 0;
+    }
+
+    .formula-text {
+      font-size: 1.4rem;
+      color: #e2e8f0;
+      letter-spacing: 1px;
+      margin-bottom: 8px;
+    }
+
+    .formula-text span.accent {
+      color: var(--neon-cyan);
+    }
+
+    .formula-text span.exp {
+      color: var(--neon-purple);
+    }
+
+    .stat-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin-top: 24px;
+    }
+
+    .stat-box {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      text-align: center;
+    }
+
+    .stat-label {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .stat-value {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--neon-glow-cyan);
+    }
+
+    /* ==========================================================================
+       Section 2: Try It Yourself (Interactive Calculator)
+       ========================================================================== */
+    .try-playground {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 24px;
+    }
+
+    .try-token-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .try-token-row {
+      display: grid;
+      grid-template-columns: 1fr 140px 48px;
+      gap: 12px;
+      align-items: center;
+      padding: 12px 16px;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid var(--border-glass);
+      border-radius: var(--radius-md);
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      animation: rowSlideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    @keyframes rowSlideIn {
+      from {
+        opacity: 0;
+        transform: translateY(-10px) scale(0.98);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    .try-token-row.removing {
+      animation: rowSlideOut 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      pointer-events: none;
+    }
+
+    @keyframes rowSlideOut {
+      from {
+        opacity: 1;
+        transform: scale(1);
+        max-height: 80px;
+        margin-bottom: 12px;
+      }
+      to {
+        opacity: 0;
+        transform: scale(0.95);
+        max-height: 0;
+        padding-top: 0;
+        padding-bottom: 0;
+        margin-bottom: 0;
+        border-color: transparent;
+      }
+    }
+
+    .try-input {
+      width: 100%;
+      background: rgba(0, 0, 0, 0.45);
+      border: 1px solid var(--border-glass);
+      border-radius: var(--radius-sm);
+      padding: 10px 14px;
+      color: var(--text-main);
+      font-family: var(--font-mono);
+      font-size: 0.95rem;
+      outline: none;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+    }
+
+    .try-input:focus {
+      border-color: var(--neon-cyan);
+      box-shadow: 0 0 12px rgba(6, 182, 212, 0.25);
+    }
+
+    @keyframes inputShake {
+      0%, 100% { transform: translateX(0); }
+      20%, 60% { transform: translateX(-6px); }
+      40%, 80% { transform: translateX(6px); }
+    }
+
+    .input-invalid {
+      border-color: #ef4444 !important;
+      box-shadow: 0 0 12px rgba(239, 68, 68, 0.4) !important;
+      animation: inputShake 0.4s ease;
+    }
+
+    .btn-remove-row {
+      width: 44px;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.25);
+      color: #fca5a5;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 1.1rem;
+      transition: all 0.2s ease;
+    }
+
+    .btn-remove-row:hover:not(:disabled) {
+      background: rgba(239, 68, 68, 0.25);
+      border-color: #ef4444;
+      color: #ffffff;
+      box-shadow: 0 0 12px rgba(239, 68, 68, 0.4);
+    }
+
+    .btn-remove-row:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+      border-color: rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.02);
+      color: var(--text-dim);
+    }
+
+    /* Live Calculator Table */
+    .table-container {
+      overflow-x: auto;
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid var(--border-glass);
+      border-radius: var(--radius-md);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    }
+
+    .live-calc-table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 0.95rem;
+    }
+
+    .live-calc-table th {
+      padding: 16px 20px;
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text-muted);
+      font-weight: 600;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      font-size: 0.8rem;
+    }
+
+    .live-calc-table td {
+      padding: 14px 20px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      color: var(--text-main);
+    }
+
+    .live-calc-table tbody tr:hover td {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    /* Probability Visual Bar in Table */
+    .prob-cell {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .prob-bar-track {
+      width: 100%;
+      max-width: 120px;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: var(--radius-full);
+      overflow: hidden;
+    }
+
+    .prob-bar-fill {
+      height: 100%;
+      border-radius: var(--radius-full);
+      background: var(--gradient-primary);
+      box-shadow: 0 0 8px var(--neon-cyan);
+      transition: width 0.25s ease;
+    }
+
+    /* Summary Footer Rows */
+    .live-calc-table tfoot tr {
+      background: rgba(168, 85, 247, 0.06);
+    }
+
+    .live-calc-table tfoot td {
+      padding: 16px 20px;
+      border-top: 1px solid rgba(168, 85, 247, 0.3);
+      border-bottom: none;
+      font-weight: 600;
+    }
+
+    .summary-badge-ppl {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 12px;
+      background: rgba(6, 182, 212, 0.15);
+      border: 1px solid var(--neon-cyan);
+      border-radius: var(--radius-sm);
+      color: var(--neon-glow-cyan);
+      font-size: 1.1rem;
+      font-weight: 700;
+      box-shadow: 0 0 15px rgba(6, 182, 212, 0.25);
+    }
+
+    @media (max-width: 600px) {
+      .try-token-row {
+        grid-template-columns: 1fr 95px 40px;
+        gap: 8px;
+        padding: 10px 12px;
+      }
+    }
+
+    @media (max-width: 420px) {
+      .try-token-row {
+        grid-template-columns: 1fr 82px 36px;
+        gap: 6px;
+        padding: 8px 10px;
+      }
+      .try-input {
+        padding: 8px 10px;
+        font-size: 0.88rem;
+      }
+    }
+
+    /* ==========================================================================
+       Section 3: How It Works (id="explain")
+       ========================================================================== */
+    /* Formula Method Switcher with Sliding Indicator */
+    .method-tab-wrapper {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 24px;
+    }
+
+    .method-tab-bar {
+      position: relative;
+      display: inline-flex;
+      background: rgba(0, 0, 0, 0.45);
+      border: 1px solid var(--border-glass);
+      border-radius: var(--radius-full);
+      padding: 4px;
+    }
+
+    .method-tab-btn {
+      position: relative;
+      z-index: 2;
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 10px 24px;
+      font-family: var(--font-main);
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: color 0.25s ease;
+      border-radius: var(--radius-full);
+      white-space: nowrap;
+    }
+
+    .method-tab-btn.active {
+      color: #ffffff;
+    }
+
+    .method-tab-slider {
+      position: absolute;
+      top: 4px;
+      bottom: 4px;
+      left: 4px;
+      width: calc(50% - 4px);
+      background: var(--gradient-primary);
+      border-radius: var(--radius-full);
+      box-shadow: 0 0 16px rgba(168, 85, 247, 0.4);
+      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    .hero-formula-box {
+      background: rgba(0, 0, 0, 0.45);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: var(--radius-md);
+      padding: 28px 24px;
+      text-align: center;
+      margin: 12px 0;
+      position: relative;
+      overflow-x: auto;
+      animation: formulaFade 0.3s ease;
+    }
+
+    @keyframes formulaFade {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .hero-formula-badge {
+      display: inline-block;
+      font-size: 0.75rem;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      font-family: var(--font-mono);
+      color: var(--neon-cyan);
+      background: rgba(6, 182, 212, 0.1);
+      border: 1px solid rgba(6, 182, 212, 0.25);
+      border-radius: var(--radius-full);
+      padding: 4px 12px;
+      margin-bottom: 16px;
+    }
+
+    .hero-formula-math {
+      font-size: clamp(1.3rem, 3.5vw, 2.1rem);
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: #f8fafc;
+      margin-bottom: 16px;
+    }
+
+    .var-ppl { color: var(--neon-glow-cyan); text-shadow: 0 0 12px rgba(6, 182, 212, 0.4); }
+    .var-exp { color: var(--neon-purple); }
+    .var-frac { color: #c084fc; }
+    .var-sum { color: #facc15; }
+    .var-log { color: #38bdf8; }
+
+    .hero-formula-legend {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 16px 24px;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      padding-top: 16px;
+    }
+
+    .hero-formula-legend strong {
+      color: var(--text-main);
+      font-family: var(--font-mono);
+    }
+
+    /* "Both Methods Match" Comparison Box */
+    .match-comparison-box {
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid rgba(168, 85, 247, 0.3);
+      border-radius: var(--radius-md);
+      padding: 24px;
+      position: relative;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    }
+
+    .match-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .match-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 1.15rem;
+      color: #ffffff;
+    }
+
+    .match-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      border-radius: var(--radius-full);
+      font-size: 0.85rem;
+      font-family: var(--font-mono);
+      font-weight: 600;
+      background: rgba(34, 197, 94, 0.12);
+      border: 1px solid #22c55e;
+      color: #86efac;
+      box-shadow: 0 0 12px rgba(34, 197, 94, 0.25);
+    }
+
+    .match-badge.warning {
+      background: rgba(239, 68, 68, 0.12);
+      border-color: #ef4444;
+      color: #fca5a5;
+      box-shadow: 0 0 12px rgba(239, 68, 68, 0.25);
+    }
+
+    .match-scores-grid {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      gap: 16px;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: var(--radius-md);
+      padding: 16px 24px;
+      margin-bottom: 16px;
+    }
+
+    @media (max-width: 640px) {
+      .match-scores-grid {
+        grid-template-columns: 1fr;
+        gap: 10px;
+        padding: 14px 18px;
+      }
+      .match-score-eq {
+        transform: rotate(90deg);
+        display: inline-block;
+      }
+    }
+
+    .match-score-card {
+      text-align: center;
+    }
+
+    .match-score-label {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 4px;
+    }
+
+    .match-score-value {
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: var(--neon-glow-cyan);
+    }
+
+    .match-score-eq {
+      font-size: 1.8rem;
+      font-weight: 700;
+      color: var(--neon-purple);
+      text-align: center;
+    }
+
+    .match-note {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      line-height: 1.6;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      padding-top: 12px;
+    }
+
+    /* Live Walkthrough Stepper */
+    .walkthrough-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .walkthrough-controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .step-nav-group {
+      display: flex;
+      gap: 6px;
+    }
+
+    .step-nav-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius-sm);
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-glass);
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 1rem;
+      transition: all 0.2s ease;
+    }
+
+    .step-nav-btn:hover:not(:disabled) {
+      background: rgba(255, 255, 255, 0.12);
+      border-color: var(--neon-cyan);
+      color: var(--neon-glow-cyan);
+    }
+
+    .step-nav-btn:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+
+    .step-stepper-bar {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 8px;
+      margin-bottom: 24px;
+    }
+
+    .stepper-tab {
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid var(--border-glass);
+      border-radius: var(--radius-md);
+      padding: 12px 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+      transition: all 0.25s ease;
+      color: var(--text-muted);
+      text-align: center;
+    }
+
+    .stepper-tab:hover {
+      background: rgba(255, 255, 255, 0.04);
+      border-color: var(--border-glass-glow);
+    }
+
+    .stepper-tab.active {
+      background: rgba(168, 85, 247, 0.12);
+      border-color: var(--neon-cyan);
+      box-shadow: 0 0 16px rgba(6, 182, 212, 0.25);
+      color: var(--text-main);
+    }
+
+    .stepper-num {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.08);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      font-weight: 700;
+    }
+
+    .stepper-tab.active .stepper-num {
+      background: var(--gradient-primary);
+      color: #fff;
+    }
+
+    .stepper-title {
+      font-size: 0.8rem;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+
+    /* Step Panels */
+    .step-viewport {
+      position: relative;
+      min-height: 200px;
+    }
+
+    .step-panel {
+      display: none;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: var(--radius-md);
+      padding: 24px;
+      animation: stepFadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    .step-panel.active {
+      display: block;
+    }
+
+    @keyframes stepFadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .step-panel-badge {
+      font-size: 0.75rem;
+      letter-spacing: 2px;
+      color: var(--neon-cyan);
+      margin-bottom: 6px;
+    }
+
+    .step-panel-heading {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: #ffffff;
+      margin-bottom: 10px;
+    }
+
+    .step-code-block {
+      background: rgba(7, 9, 14, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-left: 3px solid var(--neon-cyan);
+      border-radius: var(--radius-sm);
+      padding: 16px 20px;
+      margin-top: 16px;
+      font-size: 0.95rem;
+      line-height: 1.7;
+      color: #e2e8f0;
+      overflow-x: auto;
+    }
+
+    .code-accent { color: var(--neon-glow-cyan); font-weight: 600; }
+    .code-purple { color: #c084fc; font-weight: 600; }
+    .code-yellow { color: #facc15; font-weight: 600; }
+
+    /* "How to Read the Result" Gauge Card */
+    .gauge-card-inner {
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: var(--radius-md);
+      padding: 24px;
+    }
+
+    .gauge-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    .gauge-status-label {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+
+    .gauge-badge {
+      padding: 6px 14px;
+      border-radius: var(--radius-full);
+      background: rgba(6, 182, 212, 0.15);
+      border: 1px solid var(--neon-cyan);
+      color: var(--neon-glow-cyan);
+      font-size: 0.95rem;
+      font-weight: 700;
+      box-shadow: 0 0 15px rgba(6, 182, 212, 0.25);
+    }
+
+    .gauge-track-container {
+      position: relative;
+      margin: 32px 10px 24px;
+    }
+
+    .gauge-track {
+      width: 100%;
+      height: 16px;
+      border-radius: var(--radius-full);
+      background: linear-gradient(90deg, #10b981 0%, #06b6d4 35%, #a855f7 70%, #f43f5e 100%);
+      box-shadow: 0 0 15px rgba(168, 85, 247, 0.25);
+      display: flex;
+      overflow: hidden;
+    }
+
+    .gauge-needle {
+      position: absolute;
+      top: -12px;
+      transform: translateX(-50%);
+      transition: left 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      pointer-events: none;
+    }
+
+    .needle-pointer {
+      width: 14px;
+      height: 14px;
+      background: #ffffff;
+      border-radius: 50%;
+      box-shadow: 0 0 12px #ffffff, 0 0 20px var(--neon-cyan);
+      margin-top: 13px;
+    }
+
+    .needle-tooltip {
+      position: absolute;
+      bottom: calc(100% + 4px);
+      padding: 3px 8px;
+      background: rgba(11, 14, 25, 0.95);
+      border: 1px solid var(--neon-cyan);
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: #ffffff;
+      white-space: nowrap;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+    }
+
+    .gauge-legend {
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      font-size: 0.85rem;
+      margin-top: 16px;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      padding-top: 16px;
+    }
+
+    .step-badge {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-glass-glow);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-mono);
+      font-weight: 700;
+      color: var(--neon-cyan);
+      margin-bottom: 20px;
+      box-shadow: 0 0 15px rgba(6, 182, 212, 0.2);
+    }
+
+    .card-heading {
+      font-size: 1.35rem;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: var(--text-main);
+    }
+
+    .card-text {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      line-height: 1.6;
+    }
+
+    @media (max-width: 768px) {
+      .step-stepper-bar {
+        grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      }
+    }
+
+    @media (max-width: 480px) {
+      .step-stepper-bar {
+        display: flex;
+        overflow-x: auto;
+        padding-bottom: 8px;
+        -webkit-overflow-scrolling: touch;
+      }
+      .stepper-tab {
+        flex: 0 0 130px;
+      }
+    }
+
+    /* ==========================================================================
+       Footer
+       ========================================================================== */
+    footer {
+      border-top: 1px solid var(--border-glass);
+      padding: 40px 24px;
+      text-align: center;
+      color: var(--text-dim);
+      font-size: 0.9rem;
+      position: relative;
+      z-index: 2;
+    }
+
+    .footer-content {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    /* ==========================================================================
+       Responsive Styles
+       ========================================================================== */
+    @media (max-width: 768px) {
+      .nav-links {
+        display: none;
+      }
+
+      .mobile-menu-toggle {
+        display: block;
+      }
+
+      .stat-row {
+        grid-template-columns: 1fr;
+      }
+
+      .card-grid-2 {
+        grid-template-columns: 1fr;
+      }
+
+      .footer-content {
+        flex-direction: column;
+        text-align: center;
+      }
+    }
+
+    /* Accessibility: Respect Reduced Motion */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+        scroll-behavior: auto !important;
+      }
+
+      .cursor-glow,
+      .ambient-glow::before,
+      .ambient-glow::after,
+      .floating-token,
+      .ppl-glow-badge {
+        animation: none !important;
+      }
+
+      .cursor-glow {
+        display: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Custom Animated Cursor Glow Element -->
+  <div id="cursor-glow" class="cursor-glow"></div>
+
+  <!-- Toast Notification System -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- Ambient Glow & Grid Elements -->
+  <div class="ambient-glow"></div>
+  <div class="grid-overlay"></div>
+
+  <!-- Scroll Progress Bar -->
+  <div id="scroll-progress-container">
+    <div id="scroll-progress-bar"></div>
+  </div>
+
+  <!-- Full-Screen Launch Animation Overlay -->
+  <div id="launch-overlay">
+    <!-- Floating Token Chips -->
+    <div class="token-cloud" id="token-cloud">
+      <!-- Tokens populated by JavaScript -->
+    </div>
+
+    <!-- Glowing PPL Centerpiece -->
+    <div class="launch-centerpiece">
+      <div class="ppl-glow-badge">
+        <h1>PPL</h1>
+      </div>
+      <div class="launch-title">Perplexity Explorer</div>
+      <div class="launch-subtitle">Language Model Uncertainty & Confidence Visualizer</div>
+      <button class="skip-intro-btn btn" id="skip-intro">Enter Explorer &rarr;</button>
+    </div>
+  </div>
+
+  <!-- Sticky Top Navigation -->
+  <header class="sticky-header">
+    <div class="nav-container">
+      <a href="#" class="brand-logo">
+        <div class="brand-icon">P</div>
+        <div class="brand-text">Perplexity<span>Explorer</span></div>
+      </a>
+
+      <!-- Navigation Links -->
+      <nav>
+        <ul class="nav-links">
+          <li><a href="#calc" class="nav-link">Calculate</a></li>
+          <li><a href="#try" class="nav-link">Try It Yourself</a></li>
+          <li><a href="#explain" class="nav-link">How It Works</a></li>
+        </ul>
+      </nav>
+
+      <!-- Action Buttons -->
+      <div class="nav-actions">
+        <button class="btn btn-glass" id="replay-intro-btn" style="padding: 8px 16px; font-size: 0.85rem;">
+          Replay Intro
+        </button>
+        <a href="#try" class="btn btn-primary" style="padding: 8px 18px; font-size: 0.85rem;">
+          Launch Demo
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Page Main Content -->
+  <main class="page-container">
+
+    <!-- Hero Header -->
+    <section class="hero-section">
+      <div class="hero-badge">
+        <span class="hero-badge-dot"></span>
+        <span>Interactive Neural Metric Engine</span>
+      </div>
+      <h1 class="hero-title">
+        Demystifying <span>Perplexity</span> in Modern LLMs
+      </h1>
+      <p class="hero-desc">
+        Explore how language models quantify uncertainty, surprise, and predictive confidence across token sequences through interactive mathematical foundations.
+      </p>
+      <div class="hero-cta">
+        <a href="#calc" class="btn btn-primary">
+          Start Calculating
+        </a>
+        <a href="#explain" class="btn btn-glass">
+          Read Guide
+        </a>
+      </div>
+    </section>
+
+    <!-- Section 1: Calculate (id="calc") -->
+    <section id="calc" class="explorer-section">
+      <div class="section-header">
+        <div class="section-tag">Section 01</div>
+        <h2 class="section-title">Calculate</h2>
+        <p class="section-subtitle">
+          Measure sequence perplexity via token cross-entropy loss and exponentiation using client-side DistilGPT-2.
+        </p>
+      </div>
+
+      <div class="calc-card-container">
+        <!-- Main Interactive Calculation Card -->
+        <div class="glass-card reveal-card" id="calc-card">
+          <h3 class="card-heading">DistilGPT-2 Perplexity Engine</h3>
+          <p class="card-text" style="margin-bottom: 20px;">
+            Enter any text sequence. The model computes the predictive likelihood for each successive token conditional on prior context (with prepended <span class="mono-num">&lt;|endoftext|&gt;</span>).
+          </p>
+
+          <div class="input-wrapper">
+            <textarea 
+              id="calc-input" 
+              class="calc-textarea" 
+              placeholder="Enter a sentence or paragraph to analyze..."
+            >The cat sat on the mat.</textarea>
+          </div>
+
+          <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+            <button class="btn btn-primary" id="calc-ppl-btn">
+              <span id="calc-btn-text">Calculate Perplexity</span>
+            </button>
+            <button class="btn btn-glass" id="calc-clear-btn">Clear Text</button>
+          </div>
+
+          <!-- One-time Model Download Progress Panel -->
+          <div class="model-progress-panel" id="model-progress-panel">
+            <div class="model-progress-header">
+              <div class="model-progress-text">
+                <span class="brand-icon" style="width: 22px; height: 22px; font-size: 0.75rem;">AI</span>
+                <span>Downloading model (one time only)...</span>
+              </div>
+              <div class="model-progress-percent" id="model-progress-percent">0%</div>
+            </div>
+            <div class="model-progress-track">
+              <div class="model-progress-fill" id="model-progress-fill"></div>
+            </div>
+          </div>
+
+          <!-- Friendly Error Banner -->
+          <div class="calc-error-banner" id="calc-error-banner" style="display: none;">
+            <span style="font-size: 1.25rem;">⚠️</span>
+            <span id="calc-error-text">An error occurred during calculation.</span>
+          </div>
+
+          <!-- Results Showcase Area -->
+          <div class="calc-results-area" id="calc-results-area">
+            <!-- Big Animated Perplexity Counter -->
+            <div class="ppl-display-hero">
+              <div class="ppl-hero-title">Sequence Perplexity</div>
+              <div class="ppl-counter-value" id="ppl-value">--</div>
+              <div class="ppl-hero-subtitle" id="ppl-verdict">Lower score = higher predictive confidence</div>
+
+              <div class="stat-row" style="margin-top: 20px;">
+                <div class="stat-box">
+                  <div class="stat-label">Token Count (N)</div>
+                  <div class="stat-value" id="res-token-count">0</div>
+                </div>
+                <div class="stat-box">
+                  <div class="stat-label">Avg Log Prob</div>
+                  <div class="stat-value" id="res-avg-logprob">0.00</div>
+                </div>
+                <div class="stat-box">
+                  <div class="stat-label">Cross-Entropy Loss</div>
+                  <div class="stat-value" id="res-loss">0.00</div>
+                </div>
+              </div>
+
+              <div style="margin-top: 18px;">
+                <button class="btn btn-glass" id="calc-copy-btn" style="padding: 6px 16px; font-size: 0.85rem;">
+                  <span>📋</span> Copy Result
+                </button>
+              </div>
+            </div>
+
+            <!-- Token Chips Stream -->
+            <div>
+              <div class="token-chip-header">
+                <strong>Token Log-Likelihood Map</strong>
+                <div class="token-legend">
+                  <div class="legend-item">
+                    <span class="legend-color-dot" style="background: hsl(130, 85%, 50%);"></span>
+                    <span>Likely</span>
+                  </div>
+                  <div class="legend-item">
+                    <span class="legend-color-dot" style="background: hsl(50, 85%, 50%);"></span>
+                    <span>Moderate</span>
+                  </div>
+                  <div class="legend-item">
+                    <span class="legend-color-dot" style="background: hsl(0, 85%, 55%);"></span>
+                    <span>Surprising</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="tokens-wrapper" id="calc-tokens-container">
+                <!-- Dynamically generated token chips -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3 Feature Glass Cards in Grid -->
+        <div class="card-grid-3">
+          <div class="glass-card reveal-card">
+            <h4 class="card-heading" style="font-size: 1.15rem;">Cross-Entropy Relation</h4>
+            <p class="card-text">
+              PPL is mathematically identical to exponentiating the cross-entropy loss: <span class="mono-num">2^H(p, q)</span> or <span class="mono-num">e^loss</span>.
+            </p>
+          </div>
+          <div class="glass-card reveal-card">
+            <h4 class="card-heading" style="font-size: 1.15rem;">Branching Factor</h4>
+            <p class="card-text">
+              A perplexity of <span class="mono-num">10</span> implies the model is as uncertain as picking uniformly among 10 equally plausible words.
+            </p>
+          </div>
+          <div class="glass-card reveal-card">
+            <h4 class="card-heading" style="font-size: 1.15rem;">Vocabulary Normalization</h4>
+            <p class="card-text">
+              Per-token normalization ensures comparability across texts of differing lengths and paragraph depths.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section 2: Try It Yourself (id="try") -->
+    <section id="try" class="explorer-section">
+      <div class="section-header">
+        <div class="section-tag">Section 02</div>
+        <h2 class="section-title">Try It Yourself</h2>
+        <p class="section-subtitle">
+          Construct an arbitrary token probability sequence to see how cross-entropy loss and perplexity are derived in real time.
+        </p>
+      </div>
+
+      <div class="try-playground">
+        <div class="glass-card reveal-card">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 24px;">
+            <div>
+              <h3 class="card-heading" style="margin-bottom: 4px;">Manual Sequence Simulator</h3>
+              <p class="card-text">Define custom tokens and conditional probabilities <span class="mono-num">P(w<sub>i</sub> | w<sub>&lt;i</sub>)</span>.</p>
+            </div>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+              <button class="btn btn-glass" id="try-load-example-btn" style="padding: 8px 16px; font-size: 0.85rem;">
+                Load Example
+              </button>
+              <button class="btn btn-glass" id="try-reset-btn" style="padding: 8px 16px; font-size: 0.85rem;">
+                Reset
+              </button>
+            </div>
+          </div>
+
+          <!-- Token Rows Container -->
+          <div id="try-token-rows" class="try-token-list">
+            <!-- Dynamically populated rows -->
+          </div>
+
+          <div style="margin-top: 16px; margin-bottom: 32px;">
+            <button class="btn btn-primary" id="try-add-token-btn" style="padding: 10px 20px; font-size: 0.9rem;">
+              + Add Token
+            </button>
+          </div>
+
+          <!-- Live Math Table -->
+          <div class="table-container">
+            <table class="live-calc-table mono-num" id="try-calc-table">
+              <thead>
+                <tr>
+                  <th style="min-width: 140px;">Token</th>
+                  <th style="min-width: 180px;">P(token)</th>
+                  <th style="min-width: 130px;">ln(P)</th>
+                  <th style="min-width: 220px;">-ln(P) [Surprise]</th>
+                </tr>
+              </thead>
+              <tbody id="try-table-body">
+                <!-- Dynamically populated rows -->
+              </tbody>
+              <tfoot id="try-table-foot">
+                <!-- Summary row -->
+              </tfoot>
+            </table>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- Section 3: How It Works (id="explain") -->
+    <section id="explain" class="explorer-section">
+      <div class="section-header">
+        <div class="section-tag">Section 03</div>
+        <h2 class="section-title">How It Works</h2>
+        <p class="section-subtitle">
+          A beginner-friendly breakdown of language model uncertainty, two equivalent formulas, and score interpretation.
+        </p>
+      </div>
+
+      <div class="calc-card-container">
+        <!-- Intro & Dual Formula Glass Card -->
+        <div class="glass-card reveal-card">
+          <h3 class="card-heading">What is Perplexity?</h3>
+          <p class="card-text" style="font-size: 1.05rem; margin-bottom: 24px;">
+            In plain terms, perplexity measures <strong>how surprised the model is</strong> by what it reads. 
+            If a model predicts the exact next word with 100% certainty, its surprise is zero and its perplexity is <strong>1</strong>. 
+            If it is completely baffled and has to guess uniformly among 100 possible words, its perplexity is <strong>100</strong>. 
+            Lower perplexity always means the model is more confident and natural.
+          </p>
+
+          <!-- Sliding Tab Switcher -->
+          <div class="method-tab-wrapper">
+            <div class="method-tab-bar" id="method-tab-bar">
+              <button class="method-tab-btn active" data-method="log" id="tab-btn-log">Log Method</button>
+              <button class="method-tab-btn" data-method="simple" id="tab-btn-simple">Simple Formula (no logs)</button>
+              <div class="method-tab-slider" id="method-tab-slider"></div>
+            </div>
+          </div>
+
+          <!-- Formula 1: Logarithmic Formulation -->
+          <div class="hero-formula-box" id="formula-log-box">
+            <div class="hero-formula-badge">Logarithmic Formulation (Standard in AI)</div>
+            <div class="hero-formula-math mono-num">
+              <span class="var-ppl">PPL</span> = <span class="var-exp">exp</span>( &minus; <span class="var-frac">(1/N)</span> &times; <span class="var-sum">&Sigma;</span> <span class="var-log">ln P(token<sub>i</sub>)</span> )
+            </div>
+            <div class="hero-formula-legend">
+              <span><strong>N</strong> = Sequence Length</span>
+              <span><strong>P(token<sub>i</sub>)</strong> = Conditional Likelihood</span>
+              <span><strong>&Sigma;</strong> = Sum Over All Tokens</span>
+              <span><strong>exp</strong> = Natural Exponential</span>
+            </div>
+          </div>
+
+          <!-- Formula 2: Simple Formula (No Logs) -->
+          <div class="hero-formula-box" id="formula-simple-box" style="display: none;">
+            <div class="hero-formula-badge">Simple Formula (Direct Multiplication)</div>
+            <div class="hero-formula-math mono-num">
+              <span class="var-ppl">PPL</span> = ( <span class="var-frac">1</span> / ( <span class="var-log">P<sub>1</sub></span> &times; <span class="var-log">P<sub>2</sub></span> &times; &hellip; &times; <span class="var-log">P<sub>N</sub></span> ) )<sup><span class="var-exp">(1/N)</span></sup>
+            </div>
+            <div class="hero-formula-legend">
+              <span><strong>N</strong> = Number of Tokens</span>
+              <span><strong>P₁ &times; P₂ &times; &hellip; &times; Pₙ</strong> = Joint Sequence Probability</span>
+              <span><strong>1 / Product</strong> = Inverted Surprise</span>
+              <span><strong>(1/N) Power</strong> = N-th Geometric Root</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Dynamic Step-by-Step Walkthrough Card -->
+        <div class="glass-card reveal-card" id="walkthrough-card">
+          <div class="walkthrough-header">
+            <div>
+              <div class="section-tag" style="margin-bottom: 4px;" id="walkthrough-tag">Log Method Walkthrough</div>
+              <h3 class="card-heading" style="margin-bottom: 6px;" id="walkthrough-title">Step-by-Step Walkthrough</h3>
+              <p class="card-text">Driven by the current values from the "Try It Yourself" table above.</p>
+            </div>
+            <div class="walkthrough-controls">
+              <button class="btn btn-primary" id="play-steps-btn" style="padding: 8px 18px; font-size: 0.85rem;">
+                <span id="play-btn-icon">&#9654;</span> <span id="play-btn-label">Play Steps</span>
+              </button>
+              <div class="step-nav-group">
+                <button class="step-nav-btn" id="prev-step-btn" title="Previous Step">&larr;</button>
+                <button class="step-nav-btn" id="next-step-btn" title="Next Step">&rarr;</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Step Indicators Bar -->
+          <div class="step-stepper-bar">
+            <button class="stepper-tab active" data-step="1">
+              <span class="stepper-num mono-num">1</span>
+              <span class="stepper-title" id="stepper-title-1">Probabilities</span>
+            </button>
+            <button class="stepper-tab" data-step="2">
+              <span class="stepper-num mono-num">2</span>
+              <span class="stepper-title" id="stepper-title-2">Natural Logs</span>
+            </button>
+            <button class="stepper-tab" data-step="3">
+              <span class="stepper-num mono-num">3</span>
+              <span class="stepper-title" id="stepper-title-3">Sum Logs</span>
+            </button>
+            <button class="stepper-tab" data-step="4">
+              <span class="stepper-num mono-num">4</span>
+              <span class="stepper-title" id="stepper-title-4">Average & Flip</span>
+            </button>
+            <button class="stepper-tab" data-step="5">
+              <span class="stepper-num mono-num">5</span>
+              <span class="stepper-title" id="stepper-title-5">Final PPL</span>
+            </button>
+          </div>
+
+          <!-- Step Viewport Area -->
+          <div class="step-viewport">
+            
+            <!-- ===== LOG METHOD PANELS ===== -->
+            <div id="walkthrough-log-panels">
+              <!-- Step 1 -->
+              <div class="step-panel active" id="step-panel-log-1">
+                <div class="step-panel-badge mono-num">STEP 01</div>
+                <h4 class="step-panel-heading">List the probabilities</h4>
+                <p class="card-text">We inspect the model's confidence <span class="mono-num">P(w<sub>i</sub>)</span> for each of the <span class="mono-num" id="live-step1-n">3</span> tokens in your sequence:</p>
+                <div class="step-code-block mono-num" id="live-step1-content"></div>
+              </div>
+
+              <!-- Step 2 -->
+              <div class="step-panel" id="step-panel-log-2">
+                <div class="step-panel-badge mono-num">STEP 02</div>
+                <h4 class="step-panel-heading">Take ln of each</h4>
+                <p class="card-text">Natural logarithms convert fractional probabilities into manageable additive negative numbers:</p>
+                <div class="step-code-block mono-num" id="live-step2-content"></div>
+              </div>
+
+              <!-- Step 3 -->
+              <div class="step-panel" id="step-panel-log-3">
+                <div class="step-panel-badge mono-num">STEP 03</div>
+                <h4 class="step-panel-heading">Add them up (&Sigma;)</h4>
+                <p class="card-text">Summing the log probabilities gives the total sequence log-likelihood:</p>
+                <div class="step-code-block mono-num" id="live-step3-content"></div>
+              </div>
+
+              <!-- Step 4 -->
+              <div class="step-panel" id="step-panel-log-4">
+                <div class="step-panel-badge mono-num">STEP 04</div>
+                <h4 class="step-panel-heading">Divide by N and flip the sign</h4>
+                <p class="card-text">We divide by <span class="mono-num" id="live-step4-n">N</span> tokens and negate to obtain positive Cross-Entropy loss:</p>
+                <div class="step-code-block mono-num" id="live-step4-content"></div>
+              </div>
+
+              <!-- Step 5 -->
+              <div class="step-panel" id="step-panel-log-5">
+                <div class="step-panel-badge mono-num">STEP 05</div>
+                <h4 class="step-panel-heading">Apply exp to get perplexity</h4>
+                <p class="card-text">Exponentiating <span class="mono-num">e<sup>loss</sup></span> reverses the logarithm to produce the branching factor:</p>
+                <div class="step-code-block mono-num" id="live-step5-content"></div>
+              </div>
+            </div>
+
+            <!-- ===== SIMPLE METHOD PANELS ===== -->
+            <div id="walkthrough-simple-panels" style="display: none;">
+              <!-- Simple Step 1 -->
+              <div class="step-panel active" id="step-panel-simple-1">
+                <div class="step-panel-badge mono-num">STEP 01</div>
+                <h4 class="step-panel-heading">List the probabilities and count N</h4>
+                <p class="card-text">Directly gather all token likelihoods and count sequence length <span class="mono-num" id="simple-step1-n">N</span>:</p>
+                <div class="step-code-block mono-num" id="simple-step1-content"></div>
+              </div>
+
+              <!-- Simple Step 2 -->
+              <div class="step-panel" id="step-panel-simple-2">
+                <div class="step-panel-badge mono-num">STEP 02</div>
+                <h4 class="step-panel-heading">Multiply them all together</h4>
+                <p class="card-text">Compute the cumulative running joint probability product:</p>
+                <div class="step-code-block mono-num" id="simple-step2-content"></div>
+              </div>
+
+              <!-- Simple Step 3 -->
+              <div class="step-panel" id="step-panel-simple-3">
+                <div class="step-panel-badge mono-num">STEP 03</div>
+                <h4 class="step-panel-heading">Take 1 divided by that product</h4>
+                <p class="card-text">Invert the joint probability to measure total surprise:</p>
+                <div class="step-code-block mono-num" id="simple-step3-content"></div>
+              </div>
+
+              <!-- Simple Step 4 -->
+              <div class="step-panel" id="step-panel-simple-4">
+                <div class="step-panel-badge mono-num">STEP 04</div>
+                <h4 class="step-panel-heading">Raise it to the power 1/N (N-th root)</h4>
+                <p class="card-text">Taking the geometric root normalizes for the length of the sentence:</p>
+                <div class="step-code-block mono-num" id="simple-step4-content"></div>
+              </div>
+
+              <!-- Simple Step 5 -->
+              <div class="step-panel" id="step-panel-simple-5">
+                <div class="step-panel-badge mono-num">STEP 05</div>
+                <h4 class="step-panel-heading">Final perplexity</h4>
+                <p class="card-text">The resulting value is the exact sequence perplexity:</p>
+                <div class="step-code-block mono-num" id="simple-step5-content"></div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- "Both Methods Match" Box -->
+        <div class="match-comparison-box reveal-card">
+          <div class="match-header">
+            <div class="match-title">
+              <span class="brand-icon" style="width: 26px; height: 26px; font-size: 0.85rem;">=</span>
+              <strong>Both Methods Match</strong>
+            </div>
+            <div id="match-badge" class="match-badge">
+              <span style="font-weight: 700;">✓</span> <span>Results Equal (&Delta; &lt; 0.0001)</span>
+            </div>
+          </div>
+
+          <div class="match-scores-grid mono-num">
+            <div class="match-score-card">
+              <div class="match-score-label">Log Method:</div>
+              <div class="match-score-value" id="match-log-val">5.928</div>
+            </div>
+            <div class="match-score-eq">=</div>
+            <div class="match-score-card">
+              <div class="match-score-label">Simple Formula (no logs):</div>
+              <div class="match-score-value" id="match-simple-val">5.928</div>
+            </div>
+          </div>
+
+          <div class="match-note">
+            <span style="color: var(--neon-cyan); font-weight: 600;">⚠️ Numerical Note:</span> 
+            Very small products can underflow to 0 for long sentences, so real models use the log method.
+          </div>
+        </div>
+
+        <!-- "How to read the result" Box with Live Gauge -->
+        <div class="glass-card reveal-card">
+          <h3 class="card-heading">How to Read the Result</h3>
+          <p class="card-text" style="margin-bottom: 24px;">
+            A low perplexity means the model found the text predictable and unsurprising. A high perplexity means the text was erratic, surprising, or completely outside its training distribution.
+          </p>
+
+          <div class="gauge-card-inner">
+            <div class="gauge-header">
+              <div class="gauge-status-label">Model Confidence Gauge:</div>
+              <div class="gauge-badge mono-num" id="gauge-badge">PPL: 5.928 &bull; Confident</div>
+            </div>
+
+            <!-- Gauge Meter Bar -->
+            <div class="gauge-track-container">
+              <div class="gauge-track"></div>
+              <div class="gauge-needle" id="gauge-needle" style="left: 18%;">
+                <div class="needle-pointer"></div>
+                <div class="needle-tooltip mono-num" id="gauge-needle-label">5.93</div>
+              </div>
+            </div>
+
+            <div class="gauge-legend">
+              <span style="color: #22c55e;"><strong>1 - 10:</strong> Low / Confident</span>
+              <span style="color: #06b6d4;"><strong>10 - 30:</strong> Natural Flow</span>
+              <span style="color: #f43f5e;"><strong>30+:</strong> High / Confused</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Clean Footer -->
+  <footer>
+    <div class="footer-content">
+      <div>
+        <strong>Perplexity Explorer</strong> &copy; <span class="mono-num">2026</span> &bull; Built with Vanilla HTML/CSS/JS
+        <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 4px;">
+          Made with curiosity &bull; Demystifying LLM uncertainty one token at a time
+        </div>
+      </div>
+      <div>
+        <a href="#calc" class="nav-link" style="margin-right: 16px;">Calculate</a>
+        <a href="#try" class="nav-link" style="margin-right: 16px;">Try It</a>
+        <a href="#explain" class="nav-link">How It Works</a>
+      </div>
+    </div>
+  </footer>
+
+  <!-- ==========================================================================
+       JavaScript Logic
+       ========================================================================== -->
+  <script>
+    /**
+     * Perplexity Explorer Engine
+     * Pure Vanilla JavaScript (No Frameworks)
+     */
+    document.addEventListener('DOMContentLoaded', () => {
+      initCursorGlow();
+      initLaunchAnimation();
+      initScrollProgressBar();
+      initIntersectionObserver();
+      initRippleEffect();
+      initWalkthrough();
+      initInteractiveCalculator();
+      initPerplexityCalculator();
+      initNavigationTracking();
+    });
+
+    /* ==========================================================================
+       Cursor Glow & Toast Notification Utilities
+       ========================================================================== */
+    function initCursorGlow() {
+      const glow = document.getElementById('cursor-glow');
+      if (!glow) return;
+
+      // Disable on touch devices and if user prefers reduced motion
+      if (window.matchMedia('(pointer: coarse)').matches ||
+          window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        glow.style.display = 'none';
+        return;
+      }
+
+      let mouseX = -1000;
+      let mouseY = -1000;
+      let currentX = -1000;
+      let currentY = -1000;
+      let rafId = null;
+      let isVisible = false;
+
+      function render() {
+        // Smooth lerp (linear interpolation) for 60fps tracking without style thrashing
+        currentX += (mouseX - currentX) * 0.22;
+        currentY += (mouseY - currentY) * 0.22;
+
+        glow.style.transform = `translate3d(${currentX.toFixed(1)}px, ${currentY.toFixed(1)}px, 0)`;
+
+        if (Math.abs(mouseX - currentX) > 0.1 || Math.abs(mouseY - currentY) > 0.1) {
+          rafId = requestAnimationFrame(render);
+        } else {
+          rafId = null;
+        }
+      }
+
+      document.addEventListener('pointermove', (e) => {
+        mouseX = e.clientX;
+        mouseY = e.clientY;
+        if (!isVisible) {
+          isVisible = true;
+          glow.style.opacity = '1';
+          currentX = mouseX;
+          currentY = mouseY;
+        }
+        if (!rafId) {
+          rafId = requestAnimationFrame(render);
+        }
+      }, { passive: true });
+
+      document.addEventListener('mouseleave', () => {
+        isVisible = false;
+        glow.style.opacity = '0';
+        if (rafId) {
+          cancelAnimationFrame(rafId);
+          rafId = null;
+        }
+      });
+    }
+
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toast-container');
+      if (!container) return;
+
+      const toast = document.createElement('div');
+      toast.className = 'toast-pill';
+      const icon = type === 'success' ? '✓' : 'ℹ';
+      toast.innerHTML = `<span style="color: var(--neon-cyan); font-weight: 700;">${icon}</span> <span>${message}</span>`;
+      container.appendChild(toast);
+
+      setTimeout(() => {
+        toast.classList.add('toast-exit');
+        setTimeout(() => toast.remove(), 320);
+      }, 2400);
+    }
+
+    /* ==========================================================================
+       1. Launch Animation & Token Cloud
+       ========================================================================== */
+    function initLaunchAnimation() {
+      const overlay = document.getElementById('launch-overlay');
+      const tokenCloud = document.getElementById('token-cloud');
+      const skipBtn = document.getElementById('skip-intro');
+      const replayBtn = document.getElementById('replay-intro-btn');
+
+      // Tokens drifting in the background
+      const tokensList = [
+        "The", "cat", "sat", "on", "the", "mat",
+        "log P(w)", "exp(-loss)", "tokens", "entropy",
+        "language", "model", "P(w|context)", "perplexity",
+        "Softmax", "CrossEntropy", "N-gram", "logits",
+        "attention", "temperature", "uncertainty"
+      ];
+
+      // Spawn floating token chips
+      function populateTokens() {
+        tokenCloud.innerHTML = '';
+        const count = 22;
+        for (let i = 0; i < count; i++) {
+          const chip = document.createElement('div');
+          chip.className = 'floating-token';
+          chip.textContent = tokensList[i % tokensList.length];
+
+          // Randomized position & float characteristics
+          const x = Math.random() * 90;
+          const y = Math.random() * 85 + 5;
+          const delay = Math.random() * 4;
+          const duration = 6 + Math.random() * 6;
+          const depth = 0.7 + Math.random() * 0.5;
+
+          chip.style.left = `${x}vw`;
+          chip.style.top = `${y}vh`;
+          chip.style.animationDelay = `${delay}s`;
+          chip.style.animationDuration = `${duration}s`;
+          chip.style.transform = `scale(${depth})`;
+
+          tokenCloud.appendChild(chip);
+        }
+      }
+
+      populateTokens();
+
+      // Function to close intro overlay & stop background keyframe animations
+      function closeIntro() {
+        overlay.classList.add('slide-up');
+        setTimeout(() => {
+          overlay.style.display = 'none';
+          tokenCloud.innerHTML = ''; // Free GPU memory from off-screen animations
+        }, 900);
+      }
+
+      // Auto dismiss intro after 3.2 seconds
+      const introTimer = setTimeout(() => {
+        closeIntro();
+      }, 3200);
+
+      // Skip button listener
+      skipBtn.addEventListener('click', () => {
+        clearTimeout(introTimer);
+        closeIntro();
+      });
+
+      // Replay intro listener
+      if (replayBtn) {
+        replayBtn.addEventListener('click', () => {
+          overlay.style.display = 'flex';
+          // Force layout reflow before removing slide-up class
+          void overlay.offsetWidth;
+          overlay.classList.remove('slide-up');
+          populateTokens();
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          setTimeout(() => {
+            closeIntro();
+          }, 3200);
+        });
+      }
+    }
+
+    /* ==========================================================================
+       2. Scroll Progress Bar
+       ========================================================================== */
+    function initScrollProgressBar() {
+      const progressBar = document.getElementById('scroll-progress-bar');
+      
+      window.addEventListener('scroll', () => {
+        const scrollTop = window.scrollY || document.documentElement.scrollTop;
+        const scrollHeight = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+        const progress = scrollHeight > 0 ? (scrollTop / scrollHeight) * 100 : 0;
+        progressBar.style.width = `${progress}%`;
+      }, { passive: true });
+    }
+
+    /* ==========================================================================
+       3. IntersectionObserver for Reveal Animations
+       ========================================================================== */
+    function initIntersectionObserver() {
+      const cards = document.querySelectorAll('.reveal-card');
+
+      const observer = new IntersectionObserver((entries, obs) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('is-visible');
+            obs.unobserve(entry.target); // Trigger once
+          }
+        });
+      }, {
+        root: null,
+        threshold: 0.15,
+        rootMargin: '0px 0px -40px 0px'
+      });
+
+      cards.forEach(card => observer.observe(card));
+    }
+
+    /* ==========================================================================
+       4. Button Ripple Effect (Vanilla JS)
+       ========================================================================== */
+    function initRippleEffect() {
+      const buttons = document.querySelectorAll('.btn');
+
+      buttons.forEach(button => {
+        button.addEventListener('click', function(e) {
+          const rect = this.getBoundingClientRect();
+          const ripple = document.createElement('span');
+          ripple.classList.add('ripple');
+
+          const size = Math.max(rect.width, rect.height);
+          const x = e.clientX - rect.left - size / 2;
+          const y = e.clientY - rect.top - size / 2;
+
+          ripple.style.width = ripple.style.height = `${size}px`;
+          ripple.style.left = `${x}px`;
+          ripple.style.top = `${y}px`;
+
+          this.appendChild(ripple);
+
+          setTimeout(() => {
+            ripple.remove();
+          }, 600);
+        });
+      });
+    }
+
+    /* ==========================================================================
+       5. Interactive Token Calculator ("Try It Yourself")
+       ========================================================================== */
+    function initInteractiveCalculator() {
+      const rowsContainer = document.getElementById('try-token-rows');
+      const addTokenBtn = document.getElementById('try-add-token-btn');
+      const loadExampleBtn = document.getElementById('try-load-example-btn');
+      const resetBtn = document.getElementById('try-reset-btn');
+      const tableBody = document.getElementById('try-table-body');
+      const tableFoot = document.getElementById('try-table-foot');
+
+      // Helper for escaping strings
+      function escapeText(str) {
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      }
+
+      // Default 3 initial rows
+      const initialTokens = [
+        { name: "The", prob: 0.40 },
+        { name: "cat", prob: 0.15 },
+        { name: "sat", prob: 0.08 }
+      ];
+
+      // Curated example sequence
+      const exampleTokens = [
+        { name: "The", prob: 0.35 },
+        { name: "quick", prob: 0.12 },
+        { name: "brown", prob: 0.08 },
+        { name: "fox", prob: 0.65 }
+      ];
+
+      function createRowElement(name = '', prob = 0.5) {
+        const row = document.createElement('div');
+        row.className = 'try-token-row';
+
+        row.innerHTML = `
+          <input 
+            type="text" 
+            class="try-input token-name-input" 
+            placeholder="Token (e.g. word)" 
+            value="${escapeText(name)}"
+          />
+          <input 
+            type="number" 
+            class="try-input token-prob-input" 
+            placeholder="0.0 - 1.0" 
+            step="0.01" 
+            min="0.0001" 
+            max="1.0" 
+            value="${prob}"
+          />
+          <button class="btn-remove-row" title="Remove Token" type="button">&times;</button>
+        `;
+
+        const nameInput = row.querySelector('.token-name-input');
+        const probInput = row.querySelector('.token-prob-input');
+        const removeBtn = row.querySelector('.btn-remove-row');
+
+        // Live input listeners
+        [nameInput, probInput].forEach(inp => {
+          inp.addEventListener('input', () => {
+            validateAndCalculate();
+          });
+          // Keyboard support: Enter on inputs adds a new token row
+          inp.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              addTokenBtn.click();
+            }
+          });
+        });
+
+        // Remove row with animation
+        removeBtn.addEventListener('click', () => {
+          const totalRows = rowsContainer.querySelectorAll('.try-token-row').length;
+          if (totalRows <= 1) return; // Disallow deletion if only 1 row left
+
+          row.classList.add('removing');
+          setTimeout(() => {
+            row.remove();
+            updateRemoveButtonsState();
+            validateAndCalculate();
+            showToast('Token removed');
+          }, 280);
+        });
+
+        return row;
+      }
+
+      function updateRemoveButtonsState() {
+        const rows = rowsContainer.querySelectorAll('.try-token-row');
+        const isSingleRow = rows.length <= 1;
+        rows.forEach(r => {
+          const btn = r.querySelector('.btn-remove-row');
+          if (btn) btn.disabled = isSingleRow;
+        });
+      }
+
+      function populateRows(tokenList) {
+        rowsContainer.innerHTML = '';
+        tokenList.forEach(t => {
+          const row = createRowElement(t.name, t.prob);
+          rowsContainer.appendChild(row);
+        });
+        updateRemoveButtonsState();
+        validateAndCalculate();
+      }
+
+      function validateAndCalculate() {
+        const rows = rowsContainer.querySelectorAll('.try-token-row');
+        const tableRowsData = [];
+        let hasErrors = false;
+
+        rows.forEach(r => {
+          const nameInput = r.querySelector('.token-name-input');
+          const probInput = r.querySelector('.token-prob-input');
+
+          const name = nameInput.value.trim() || '—';
+          const probVal = parseFloat(probInput.value);
+
+          // Validate: probability must be between 0 and 1
+          if (isNaN(probVal) || probVal <= 0 || probVal > 1) {
+            probInput.classList.add('input-invalid');
+            hasErrors = true;
+          } else {
+            probInput.classList.remove('input-invalid');
+            const lnP = Math.log(probVal);
+            const negLnP = -lnP;
+            tableRowsData.push({
+              name,
+              prob: probVal,
+              lnP,
+              negLnP
+            });
+          }
+        });
+
+        renderTable(tableRowsData, hasErrors);
+        if (typeof window.updateWalkthrough === 'function') {
+          window.updateWalkthrough(tableRowsData);
+        }
+      }
+
+      function renderTable(data, hasErrors) {
+        tableBody.innerHTML = '';
+        tableFoot.innerHTML = '';
+
+        if (data.length === 0) {
+          tableBody.innerHTML = `
+            <tr>
+              <td colspan="4" style="text-align: center; color: var(--text-dim); padding: 24px;">
+                ${hasErrors ? 'Please fix highlighted invalid probability values (must be between 0 and 1).' : 'No tokens defined.'}
+              </td>
+            </tr>
+          `;
+          return;
+        }
+
+        let sumNegLnP = 0;
+        let sumLnP = 0;
+
+        data.forEach(item => {
+          sumNegLnP += item.negLnP;
+          sumLnP += item.lnP;
+
+          const tr = document.createElement('tr');
+          const pct = Math.max(0, Math.min(100, (item.prob * 100))).toFixed(1);
+
+          tr.innerHTML = `
+            <td><strong style="color: #ffffff;">${escapeText(item.name)}</strong></td>
+            <td>
+              <div class="prob-cell">
+                <span>${item.prob.toFixed(4)}</span>
+                <div class="prob-bar-track">
+                  <div class="prob-bar-fill" style="width: ${pct}%;"></div>
+                </div>
+              </div>
+            </td>
+            <td style="color: #94a3b8;">${item.lnP.toFixed(4)}</td>
+            <td style="color: var(--neon-cyan);">${item.negLnP.toFixed(4)}</td>
+          `;
+          tableBody.appendChild(tr);
+        });
+
+        // Summary calculations
+        const count = data.length;
+        const avgNegLnP = sumNegLnP / count;
+        const perplexity = Math.exp(avgNegLnP);
+
+        tableFoot.innerHTML = `
+          <tr>
+            <td><strong>Summary (N = ${count})</strong></td>
+            <td>
+              <div style="color: var(--text-muted); font-size: 0.8rem;">AVG PROBABILITY</div>
+              <div style="color: #f8fafc; font-size: 1.05rem;">${(data.reduce((acc, i) => acc + i.prob, 0) / count).toFixed(4)}</div>
+            </td>
+            <td>
+              <div style="color: var(--text-muted); font-size: 0.8rem;">SUM ln(P)</div>
+              <div style="color: #94a3b8; font-size: 1.05rem;">${sumLnP.toFixed(4)}</div>
+            </td>
+            <td>
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                <div>
+                  <span style="color: var(--text-muted); font-size: 0.8rem;">&Sigma;(-ln P):</span> 
+                  <span style="color: var(--neon-cyan);">${sumNegLnP.toFixed(4)}</span>
+                </div>
+                <div>
+                  <span style="color: var(--text-muted); font-size: 0.8rem;">Average Loss:</span> 
+                  <span style="color: #f8fafc;">${avgNegLnP.toFixed(4)}</span>
+                </div>
+                <div style="margin-top: 8px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                  <span class="summary-badge-ppl">
+                    PPL = ${perplexity.toFixed(3)}
+                  </span>
+                  <button class="btn btn-glass" id="try-copy-btn" type="button" style="padding: 4px 10px; font-size: 0.75rem;">
+                    📋 Copy Summary
+                  </button>
+                </div>
+              </div>
+            </td>
+          </tr>
+        `;
+
+        // Wire Copy Summary Button
+        const copySummaryBtn = document.getElementById('try-copy-btn');
+        if (copySummaryBtn) {
+          copySummaryBtn.addEventListener('click', () => {
+            const tokenSummary = data.map(d => `${d.name} (P=${d.prob.toFixed(4)})`).join(', ');
+            const summaryText = `Perplexity: ${perplexity.toFixed(3)}\nCross-Entropy Loss: ${avgNegLnP.toFixed(4)}\nTokens (N=${count}): ${tokenSummary}`;
+            navigator.clipboard.writeText(summaryText).then(() => {
+              showToast('Summary copied to clipboard!', 'success');
+            }).catch(() => {
+              showToast('Copied summary', 'info');
+            });
+          });
+        }
+      }
+
+      // Add token button
+      addTokenBtn.addEventListener('click', () => {
+        const row = createRowElement('', 0.20);
+        rowsContainer.appendChild(row);
+        updateRemoveButtonsState();
+        row.querySelector('.token-name-input').focus();
+        validateAndCalculate();
+        showToast('Token added');
+      });
+
+      // Load example button
+      loadExampleBtn.addEventListener('click', () => {
+        populateRows(exampleTokens);
+        showToast('Loaded example sequence');
+      });
+
+      // Reset button
+      resetBtn.addEventListener('click', () => {
+        populateRows(initialTokens);
+        showToast('Reset to default tokens');
+      });
+
+      // Initialize with default 3 rows
+      populateRows(initialTokens);
+    }
+
+    /* ==========================================================================
+       6. Perplexity Calculator (DistilGPT-2 via Transformers.js)
+       ========================================================================== */
+    function initPerplexityCalculator() {
+      const calcCard = document.getElementById('calc-card');
+      const calcInput = document.getElementById('calc-input');
+      const calcBtn = document.getElementById('calc-ppl-btn');
+      const calcBtnText = document.getElementById('calc-btn-text');
+      const clearBtn = document.getElementById('calc-clear-btn');
+      const progressPanel = document.getElementById('model-progress-panel');
+      const progressPercent = document.getElementById('model-progress-percent');
+      const progressFill = document.getElementById('model-progress-fill');
+      const errorBanner = document.getElementById('calc-error-banner');
+      const errorText = document.getElementById('calc-error-text');
+      const resultsArea = document.getElementById('calc-results-area');
+      const pplValue = document.getElementById('ppl-value');
+      const resTokenCount = document.getElementById('res-token-count');
+      const resAvgLogprob = document.getElementById('res-avg-logprob');
+      const resLoss = document.getElementById('res-loss');
+      const tokensContainer = document.getElementById('calc-tokens-container');
+
+      // Shared model instances across clicks (download once, reuse on subsequent clicks)
+      let loadedTokenizer = null;
+      let loadedModel = null;
+      let loadedTensorClass = null;
+
+      // Escape HTML helper for safe tooltips
+      function escapeHtml(str) {
+        return str
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      }
+
+      // Smooth count-up animation for Perplexity number
+      function animateCountUp(element, targetValue, duration = 1200) {
+        const startValue = 1.0;
+        const startTime = performance.now();
+
+        function step(now) {
+          const elapsed = now - startTime;
+          const progress = Math.min(elapsed / duration, 1);
+          // Ease-out cubic curve
+          const ease = 1 - Math.pow(1 - progress, 3);
+          const current = startValue + (targetValue - startValue) * ease;
+          element.textContent = current.toFixed(2);
+
+          if (progress < 1) {
+            requestAnimationFrame(step);
+          } else {
+            element.textContent = targetValue.toFixed(2);
+          }
+        }
+
+        requestAnimationFrame(step);
+      }
+
+      // Load Xenova/distilgpt2 on first click only
+      async function loadModelAndTokenizer() {
+        if (loadedTokenizer && loadedModel && loadedTensorClass) {
+          return { tokenizer: loadedTokenizer, model: loadedModel, Tensor: loadedTensorClass };
+        }
+
+        // Show progress UI on first load
+        progressPanel.style.display = 'block';
+        progressPercent.textContent = '0%';
+        progressFill.style.width = '0%';
+
+        // Dynamic ES module import from jsdelivr CDN
+        const transformers = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2');
+        const { AutoTokenizer, AutoModelForCausalLM, Tensor } = transformers;
+
+        const downloadProgress = {};
+        const progressCallback = (info) => {
+          if (info.status === 'progress' && info.file) {
+            downloadProgress[info.file] = info.progress || 0;
+          } else if (info.status === 'done' && info.file) {
+            downloadProgress[info.file] = 100;
+          }
+
+          const fileKeys = Object.keys(downloadProgress);
+          if (fileKeys.length > 0) {
+            const sum = fileKeys.reduce((acc, k) => acc + (downloadProgress[k] || 0), 0);
+            const percentage = Math.min(99, Math.round(sum / fileKeys.length));
+            progressPercent.textContent = `${percentage}%`;
+            progressFill.style.width = `${percentage}%`;
+          }
+        };
+
+        loadedTokenizer = await AutoTokenizer.from_pretrained('Xenova/distilgpt2', { progress_callback: progressCallback });
+        loadedModel = await AutoModelForCausalLM.from_pretrained('Xenova/distilgpt2', { progress_callback: progressCallback });
+        loadedTensorClass = Tensor;
+
+        // Completed
+        progressPercent.textContent = '100%';
+        progressFill.style.width = '100%';
+        setTimeout(() => {
+          progressPanel.style.display = 'none';
+        }, 500);
+
+        return { tokenizer: loadedTokenizer, model: loadedModel, Tensor: loadedTensorClass };
+      }
+
+      // Render token chips with hover tooltips and colored green (likely) to red (surprising)
+      function renderTokens(tokens) {
+        tokensContainer.innerHTML = '';
+        tokens.forEach(tok => {
+          // Hue mapping: logProb from -5.5 (or below) -> 0° (red) to 0.0 -> 130° (green)
+          const norm = Math.max(0, Math.min(1, (tok.logProb + 5.5) / 5.5));
+          const hue = Math.round(norm * 130);
+
+          const chip = document.createElement('div');
+          chip.className = 'calc-token-chip';
+          chip.style.backgroundColor = `hsla(${hue}, 85%, 52%, 0.16)`;
+          chip.style.borderColor = `hsla(${hue}, 85%, 55%, 0.42)`;
+          chip.style.color = `hsl(${hue}, 95%, 82%)`;
+
+          const chipLabel = tok.text === ' ' ? '␣' : tok.text;
+          chip.textContent = chipLabel;
+
+          // Tooltip showing exact probability, log prob and surprise
+          const tooltip = document.createElement('div');
+          tooltip.className = 'token-tooltip mono-num';
+          const probPercent = (tok.prob * 100).toFixed(2);
+          const surpriseNats = (-tok.logProb).toFixed(3);
+
+          tooltip.innerHTML = `
+            <div><strong>Token:</strong> "${escapeHtml(tok.text)}"</div>
+            <div><strong>Probability:</strong> ${probPercent}% (p=${tok.prob.toFixed(4)})</div>
+            <div><strong>Log Prob:</strong> ${tok.logProb.toFixed(3)}</div>
+            <div><strong>Surprise:</strong> ${surpriseNats} nats</div>
+          `;
+
+          chip.appendChild(tooltip);
+          tokensContainer.appendChild(chip);
+        });
+      }
+
+      // Calculate Perplexity computation handler
+      async function handleCalculate() {
+        const text = calcInput.value.trim();
+
+        // Friendly validation error
+        if (!text) {
+          errorBanner.style.display = 'flex';
+          errorText.textContent = 'Please enter a sentence or prompt to calculate its perplexity.';
+          return;
+        }
+
+        // Reset UI states
+        errorBanner.style.display = 'none';
+        calcBtn.disabled = true;
+        calcBtnText.textContent = 'Analyzing...';
+        calcCard.classList.add('shimmer-active');
+
+        try {
+          // 1. Load or reuse model
+          const { tokenizer, model, Tensor } = await loadModelAndTokenizer();
+
+          // 2. Tokenize input text
+          calcBtnText.textContent = 'Tokenizing text...';
+          const encoded = await tokenizer(text);
+          const rawTokens = Array.from(encoded.input_ids.data).map(x => Number(x));
+
+          if (rawTokens.length === 0) {
+            throw new Error('No valid tokens could be extracted from the input text.');
+          }
+
+          // Prepend <|endoftext|> (id 50256) so first token also gets a conditional probability
+          const bosId = tokenizer.bos_token_id ?? tokenizer.eos_token_id ?? 50256;
+          const fullTokenIds = [BigInt(bosId), ...rawTokens.map(id => BigInt(id))];
+
+          // 3. Create input tensor and execute model forward pass
+          calcBtnText.textContent = 'Running model forward pass...';
+          const inputTensor = new Tensor('int64', new BigInt64Array(fullTokenIds), [1, fullTokenIds.length]);
+          const output = await model({ input_ids: inputTensor });
+
+          // 4. Compute log-probabilities for each token given preceding context
+          const logits = output.logits;
+          const vocabSize = logits.dims[2];
+          const logitsData = logits.data;
+
+          const tokensData = [];
+          let sumLogProb = 0;
+
+          for (let i = 0; i < rawTokens.length; i++) {
+            const targetTokenId = rawTokens[i];
+            const offset = i * vocabSize; // Logits at position i predict token at position i + 1
+
+            // LogSumExp over vocabulary for position i
+            let maxLogit = -Infinity;
+            for (let v = 0; v < vocabSize; v++) {
+              const val = logitsData[offset + v];
+              if (val > maxLogit) maxLogit = val;
+            }
+
+            let sumExp = 0;
+            for (let v = 0; v < vocabSize; v++) {
+              sumExp += Math.exp(logitsData[offset + v] - maxLogit);
+            }
+            const logSumExp = maxLogit + Math.log(sumExp);
+
+            const targetLogit = logitsData[offset + targetTokenId];
+            const logProb = targetLogit - logSumExp;
+            const prob = Math.exp(logProb);
+            sumLogProb += logProb;
+
+            const tokenStr = tokenizer.decode([targetTokenId]);
+            tokensData.push({
+              id: targetTokenId,
+              text: tokenStr,
+              logProb,
+              prob
+            });
+          }
+
+          // Perplexity = exp(-average log probability)
+          const avgLogProb = sumLogProb / rawTokens.length;
+          const perplexity = Math.exp(-avgLogProb);
+          const loss = -avgLogProb;
+
+          // 5. Update Results UI
+          resultsArea.style.display = 'block';
+          animateCountUp(pplValue, perplexity, 1400);
+
+          resTokenCount.textContent = rawTokens.length;
+          resAvgLogprob.textContent = avgLogProb.toFixed(3);
+          resLoss.textContent = loss.toFixed(3);
+
+          renderTokens(tokensData);
+
+        } catch (err) {
+          console.error('Calculation error:', err);
+          errorBanner.style.display = 'flex';
+          errorText.textContent = `Calculation failed: ${err.message || 'Unable to execute inference.'} Please check your connection or try again.`;
+        } finally {
+          calcCard.classList.remove('shimmer-active');
+          calcBtn.disabled = false;
+          calcBtnText.textContent = 'Calculate Perplexity';
+        }
+      }
+
+      calcBtn.addEventListener('click', handleCalculate);
+
+      // Keyboard support: Enter or Ctrl/Cmd+Enter to calculate
+      calcInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey || !e.shiftKey)) {
+          e.preventDefault();
+          calcBtn.click();
+        }
+      });
+
+      // Copy result button listener
+      const copyCalcBtn = document.getElementById('calc-copy-btn');
+      if (copyCalcBtn) {
+        copyCalcBtn.addEventListener('click', () => {
+          const ppl = pplValue.textContent;
+          const count = resTokenCount.textContent;
+          const loss = resLoss.textContent;
+          const text = calcInput.value.trim();
+          const copyStr = `Perplexity: ${ppl}\nCross-Entropy Loss: ${loss}\nToken Count: ${count}\nInput Sequence: "${text}"`;
+
+          navigator.clipboard.writeText(copyStr).then(() => {
+            showToast('Result copied to clipboard!', 'success');
+          }).catch(() => {
+            showToast('Result copied to clipboard!', 'info');
+          });
+        });
+      }
+
+      clearBtn.addEventListener('click', () => {
+        calcInput.value = '';
+        calcInput.focus();
+        errorBanner.style.display = 'none';
+        showToast('Text cleared');
+      });
+    }
+
+    /* ==========================================================================
+       7. Walkthrough Stepper, Dual Methods & Live Gauge ("How It Works")
+       ========================================================================== */
+    function initWalkthrough() {
+      // Tab switcher elements
+      const tabBtnLog = document.getElementById('tab-btn-log');
+      const tabBtnSimple = document.getElementById('tab-btn-simple');
+      const methodSlider = document.getElementById('method-tab-slider');
+      const formulaLogBox = document.getElementById('formula-log-box');
+      const formulaSimpleBox = document.getElementById('formula-simple-box');
+      const walkthroughLogPanels = document.getElementById('walkthrough-log-panels');
+      const walkthroughSimplePanels = document.getElementById('walkthrough-simple-panels');
+      const walkthroughTag = document.getElementById('walkthrough-tag');
+      const walkthroughTitle = document.getElementById('walkthrough-title');
+
+      // Stepper & controls
+      const stepperTabs = document.querySelectorAll('.stepper-tab');
+      const prevBtn = document.getElementById('prev-step-btn');
+      const nextBtn = document.getElementById('next-step-btn');
+      const playBtn = document.getElementById('play-steps-btn');
+      const playIcon = document.getElementById('play-btn-icon');
+      const playLabel = document.getElementById('play-btn-label');
+
+      // Log step content elements
+      const step1N = document.getElementById('live-step1-n');
+      const step1Content = document.getElementById('live-step1-content');
+      const step2Content = document.getElementById('live-step2-content');
+      const step3Content = document.getElementById('live-step3-content');
+      const step4N = document.getElementById('live-step4-n');
+      const step4Content = document.getElementById('live-step4-content');
+      const step5Content = document.getElementById('live-step5-content');
+
+      // Simple step content elements
+      const simpleStep1N = document.getElementById('simple-step1-n');
+      const simpleStep1Content = document.getElementById('simple-step1-content');
+      const simpleStep2Content = document.getElementById('simple-step2-content');
+      const simpleStep3Content = document.getElementById('simple-step3-content');
+      const simpleStep4Content = document.getElementById('simple-step4-content');
+      const simpleStep5Content = document.getElementById('simple-step5-content');
+
+      // Stepper title elements
+      const stepperTitle1 = document.getElementById('stepper-title-1');
+      const stepperTitle2 = document.getElementById('stepper-title-2');
+      const stepperTitle3 = document.getElementById('stepper-title-3');
+      const stepperTitle4 = document.getElementById('stepper-title-4');
+      const stepperTitle5 = document.getElementById('stepper-title-5');
+
+      // Both methods match elements
+      const matchLogVal = document.getElementById('match-log-val');
+      const matchSimpleVal = document.getElementById('match-simple-val');
+      const matchBadge = document.getElementById('match-badge');
+
+      // Gauge elements
+      const gaugeNeedle = document.getElementById('gauge-needle');
+      const gaugeNeedleLabel = document.getElementById('gauge-needle-label');
+      const gaugeBadge = document.getElementById('gauge-badge');
+
+      let activeMethod = 'log'; // 'log' | 'simple'
+      let currentStep = 1;
+      const totalSteps = 5;
+      let isPlaying = false;
+      let playTimer = null;
+
+      function escapeText(str) {
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      }
+
+      const logTitles = ['Probabilities', 'Natural Logs', 'Sum Logs', 'Average & Flip', 'Final PPL'];
+      const simpleTitles = ['Probabilities & N', 'Multiply All', 'Invert (1/Prod)', 'N-th Root (1/N)', 'Final PPL'];
+
+      function setMethod(method) {
+        activeMethod = method;
+
+        if (method === 'log') {
+          tabBtnLog.classList.add('active');
+          tabBtnSimple.classList.remove('active');
+          if (methodSlider) methodSlider.style.transform = 'translateX(0)';
+
+          if (formulaLogBox) formulaLogBox.style.display = 'block';
+          if (formulaSimpleBox) formulaSimpleBox.style.display = 'none';
+
+          if (walkthroughLogPanels) walkthroughLogPanels.style.display = 'block';
+          if (walkthroughSimplePanels) walkthroughSimplePanels.style.display = 'none';
+
+          if (walkthroughTag) walkthroughTag.textContent = 'Log Method Walkthrough';
+          if (walkthroughTitle) walkthroughTitle.textContent = 'Step-by-Step Walkthrough (Log Method)';
+
+          if (stepperTitle1) stepperTitle1.textContent = logTitles[0];
+          if (stepperTitle2) stepperTitle2.textContent = logTitles[1];
+          if (stepperTitle3) stepperTitle3.textContent = logTitles[2];
+          if (stepperTitle4) stepperTitle4.textContent = logTitles[3];
+          if (stepperTitle5) stepperTitle5.textContent = logTitles[4];
+        } else {
+          tabBtnSimple.classList.add('active');
+          tabBtnLog.classList.remove('active');
+          if (methodSlider) methodSlider.style.transform = 'translateX(100%)';
+
+          if (formulaLogBox) formulaLogBox.style.display = 'none';
+          if (formulaSimpleBox) formulaSimpleBox.style.display = 'block';
+
+          if (walkthroughLogPanels) walkthroughLogPanels.style.display = 'none';
+          if (walkthroughSimplePanels) walkthroughSimplePanels.style.display = 'block';
+
+          if (walkthroughTag) walkthroughTag.textContent = 'Simple Formula Walkthrough';
+          if (walkthroughTitle) walkthroughTitle.textContent = 'Step-by-Step Walkthrough (Simple Method)';
+
+          if (stepperTitle1) stepperTitle1.textContent = simpleTitles[0];
+          if (stepperTitle2) stepperTitle2.textContent = simpleTitles[1];
+          if (stepperTitle3) stepperTitle3.textContent = simpleTitles[2];
+          if (stepperTitle4) stepperTitle4.textContent = simpleTitles[3];
+          if (stepperTitle5) stepperTitle5.textContent = simpleTitles[4];
+        }
+
+        setActiveStep(currentStep);
+      }
+
+      if (tabBtnLog) tabBtnLog.addEventListener('click', () => setMethod('log'));
+      if (tabBtnSimple) tabBtnSimple.addEventListener('click', () => setMethod('simple'));
+
+      function setActiveStep(stepIndex) {
+        currentStep = stepIndex;
+
+        stepperTabs.forEach(tab => {
+          const tabStep = parseInt(tab.getAttribute('data-step'), 10);
+          tab.classList.toggle('active', tabStep === currentStep);
+        });
+
+        // Toggle log panels
+        for (let i = 1; i <= totalSteps; i++) {
+          const logPanel = document.getElementById(`step-panel-log-${i}`);
+          if (logPanel) logPanel.classList.toggle('active', i === currentStep);
+
+          const simplePanel = document.getElementById(`step-panel-simple-${i}`);
+          if (simplePanel) simplePanel.classList.toggle('active', i === currentStep);
+        }
+
+        if (prevBtn) prevBtn.disabled = currentStep === 1;
+        if (nextBtn) nextBtn.disabled = currentStep === totalSteps;
+      }
+
+      // Stepper Tab Clicks
+      stepperTabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+          stopPlayback();
+          const target = parseInt(tab.getAttribute('data-step'), 10);
+          setActiveStep(target);
+        });
+      });
+
+      // Navigation Prev / Next
+      if (prevBtn) {
+        prevBtn.addEventListener('click', () => {
+          stopPlayback();
+          if (currentStep > 1) {
+            setActiveStep(currentStep - 1);
+          }
+        });
+      }
+
+      if (nextBtn) {
+        nextBtn.addEventListener('click', () => {
+          stopPlayback();
+          if (currentStep < totalSteps) {
+            setActiveStep(currentStep + 1);
+          }
+        });
+      }
+
+      // Playback Controls (cycles 1..5 for active method)
+      function startPlayback() {
+        isPlaying = true;
+        playIcon.innerHTML = '&#10074;&#10074;';
+        playLabel.textContent = 'Pause';
+        playTimer = setInterval(() => {
+          const next = currentStep >= totalSteps ? 1 : currentStep + 1;
+          setActiveStep(next);
+        }, 1600);
+      }
+
+      function stopPlayback() {
+        if (!isPlaying) return;
+        isPlaying = false;
+        playIcon.innerHTML = '&#9654;';
+        playLabel.textContent = 'Play Steps';
+        clearInterval(playTimer);
+        playTimer = null;
+      }
+
+      if (playBtn) {
+        playBtn.addEventListener('click', () => {
+          if (isPlaying) {
+            stopPlayback();
+          } else {
+            startPlayback();
+          }
+        });
+      }
+
+      // Global Live Update function called by "Try It Yourself"
+      window.updateWalkthrough = function(tokensData) {
+        if (!tokensData || tokensData.length === 0) {
+          const emptyMsg = '<div style="color: var(--text-dim);">No valid token sequence defined above.</div>';
+          [step1Content, step2Content, step3Content, step4Content, step5Content,
+           simpleStep1Content, simpleStep2Content, simpleStep3Content, simpleStep4Content, simpleStep5Content].forEach(el => {
+            if (el) el.innerHTML = emptyMsg;
+          });
+          return;
+        }
+
+        const N = tokensData.length;
+        if (step1N) step1N.textContent = N;
+        if (step4N) step4N.textContent = N;
+        if (simpleStep1N) simpleStep1N.textContent = N;
+
+        // Check if any probability is 0 (or <= 0)
+        const hasZeroProb = tokensData.some(t => t.prob <= 0);
+
+        // ==========================================
+        // 1. CALCULATE LOG METHOD
+        // ==========================================
+        // Step 1: List Probabilities
+        if (step1Content) {
+          let step1Html = `<div style="margin-bottom: 8px; color: var(--text-muted);">Sequence length N = <span class="code-accent">${N}</span> tokens:</div>`;
+          tokensData.forEach((tok, idx) => {
+            step1Html += `<div>Token ${idx + 1}: <span class="code-accent">"${escapeText(tok.name)}"</span> &rarr; P(w<sub>${idx + 1}</sub>) = <span class="code-accent">${tok.prob.toFixed(4)}</span></div>`;
+          });
+          step1Content.innerHTML = step1Html;
+        }
+
+        // Step 2: Natural Logs
+        if (step2Content) {
+          let step2Html = `<div style="margin-bottom: 8px; color: var(--text-muted);">Natural logarithm ln(P) for each token:</div>`;
+          tokensData.forEach((tok, idx) => {
+            step2Html += `<div>ln(P("${escapeText(tok.name)}")) = ln(${tok.prob.toFixed(4)}) = <span class="code-purple">${tok.lnP.toFixed(4)}</span></div>`;
+          });
+          step2Content.innerHTML = step2Html;
+        }
+
+        // Step 3: Add them up
+        const sumLnP = tokensData.reduce((acc, t) => acc + t.lnP, 0);
+        if (step3Content) {
+          let step3Html = `<div style="margin-bottom: 8px; color: var(--text-muted);">Total log-likelihood summation &Sigma; ln(P):</div>`;
+          const sumFormula = tokensData.map(t => `(${t.lnP.toFixed(4)})`).join(' + ');
+          step3Html += `<div style="word-break: break-all;">&Sigma; ln(P) = ${sumFormula}</div>`;
+          step3Html += `<div style="margin-top: 8px; font-size: 1.05rem;"><strong>&Sigma; ln(P) = <span class="code-yellow">${sumLnP.toFixed(4)}</span></strong></div>`;
+          step3Content.innerHTML = step3Html;
+        }
+
+        // Step 4: Divide by N and flip sign
+        const avgLoss = -sumLnP / N;
+        if (step4Content) {
+          let step4Html = `<div style="margin-bottom: 8px; color: var(--text-muted);">Cross-Entropy Loss (average negative log probability):</div>`;
+          step4Html += `<div>Loss = &minus; ( 1 / ${N} ) &times; (${sumLnP.toFixed(4)})</div>`;
+          step4Html += `<div>Loss = &minus; (${(sumLnP / N).toFixed(4)})</div>`;
+          step4Html += `<div style="margin-top: 8px; font-size: 1.05rem;"><strong>Loss = <span class="code-accent">${avgLoss.toFixed(4)} nats</span></strong></div>`;
+          step4Content.innerHTML = step4Html;
+        }
+
+        // Step 5: Exponentiate
+        const logPpl = Math.exp(avgLoss);
+        if (step5Content) {
+          let step5Html = `<div style="margin-bottom: 8px; color: var(--text-muted);">Exponentiating average loss to recover branching factor:</div>`;
+          step5Html += `<div>PPL = exp(${avgLoss.toFixed(4)}) = e<sup>${avgLoss.toFixed(4)}</sup></div>`;
+          step5Html += `<div style="margin-top: 10px; font-size: 1.25rem;"><strong>PPL = <span class="code-accent" style="font-size: 1.4rem;">${logPpl.toFixed(3)}</span></strong></div>`;
+          step5Html += `<div style="margin-top: 6px; color: var(--text-muted); font-size: 0.85rem;">Equivalent to guessing uniformly among ${logPpl.toFixed(1)} equally plausible words at each token.</div>`;
+          step5Content.innerHTML = step5Html;
+        }
+
+        // ==========================================
+        // 2. CALCULATE SIMPLE METHOD (NO LOGS)
+        // ==========================================
+        // Step 1: List Probabilities and N
+        if (simpleStep1Content) {
+          let s1Html = `<div style="margin-bottom: 8px; color: var(--text-muted);">Gather all token probabilities and token count N = <span class="code-accent">${N}</span>:</div>`;
+          tokensData.forEach((tok, idx) => {
+            s1Html += `<div>P<sub>${idx + 1}</sub> ("${escapeText(tok.name)}") = <span class="code-accent">${tok.prob.toFixed(4)}</span></div>`;
+          });
+          simpleStep1Content.innerHTML = s1Html;
+        }
+
+        // Step 2: Multiply them all together (Running product)
+        let runningProduct = 1.0;
+        let s2Html = `<div style="margin-bottom: 8px; color: var(--text-muted);">Cumulative running product of all token probabilities:</div>`;
+        tokensData.forEach((tok, idx) => {
+          const prev = runningProduct;
+          runningProduct *= tok.prob;
+          if (idx === 0) {
+            s2Html += `<div>Token 1: <span class="code-accent">${tok.prob.toFixed(4)}</span></div>`;
+          } else {
+            s2Html += `<div>Step ${idx + 1}: ${prev.toFixed(6)} &times; ${tok.prob.toFixed(4)} = <span class="code-purple">${runningProduct.toFixed(6)}</span></div>`;
+          }
+        });
+        s2Html += `<div style="margin-top: 8px; font-size: 1.05rem;"><strong>Joint Product = <span class="code-yellow">${runningProduct.toExponential(4)}</span> (${runningProduct.toFixed(6)})</strong></div>`;
+        if (simpleStep2Content) simpleStep2Content.innerHTML = s2Html;
+
+        // Step 3: Take 1 divided by that product (Guard against 0)
+        let simplePpl = null;
+        if (simpleStep3Content) {
+          if (hasZeroProb || runningProduct <= 0) {
+            simpleStep3Content.innerHTML = `
+              <div style="color: #f87171; line-height: 1.6;">
+                <strong>⚠️ Division by Zero Guard:</strong><br>
+                The joint probability is 0 (or has numerically underflowed to 0).<br>
+                1 / 0 is undefined (&infin;).<br>
+                <em>This is exactly why real AI models use the Log Method instead of direct multiplication.</em>
+              </div>
+            `;
+          } else {
+            const inverted = 1 / runningProduct;
+            let s3Html = `<div style="margin-bottom: 8px; color: var(--text-muted);">Invert the joint sequence probability to measure total surprise:</div>`;
+            s3Html += `<div>1 / Product = 1 / (${runningProduct.toExponential(4)})</div>`;
+            s3Html += `<div style="margin-top: 8px; font-size: 1.05rem;"><strong>1 / Product = <span class="code-accent">${inverted.toFixed(4)}</span></strong></div>`;
+            simpleStep3Content.innerHTML = s3Html;
+          }
+        }
+
+        // Step 4: Raise to power 1/N
+        if (simpleStep4Content) {
+          if (hasZeroProb || runningProduct <= 0) {
+            simpleStep4Content.innerHTML = `<div style="color: #f87171;">Cannot compute N-th root of undefined value.</div>`;
+          } else {
+            const inverted = 1 / runningProduct;
+            simplePpl = Math.pow(inverted, 1 / N);
+            let s4Html = `<div style="margin-bottom: 8px; color: var(--text-muted);">Take the geometric N-th root by raising to the power 1/${N}:</div>`;
+            s4Html += `<div>(${inverted.toFixed(4)})<sup>1/${N}</sup> = (${inverted.toFixed(4)})<sup>${(1/N).toFixed(4)}</sup></div>`;
+            s4Html += `<div style="margin-top: 8px; font-size: 1.05rem;"><strong>Result = <span class="code-accent">${simplePpl.toFixed(3)}</span></strong></div>`;
+            simpleStep4Content.innerHTML = s4Html;
+          }
+        }
+
+        // Step 5: Final Perplexity
+        if (simpleStep5Content) {
+          if (hasZeroProb || runningProduct <= 0) {
+            simpleStep5Content.innerHTML = `<div style="color: #f87171;">PPL is undefined due to zero probability underflow.</div>`;
+          } else {
+            let s5Html = `<div style="margin-bottom: 8px; color: var(--text-muted);">Final perplexity obtained without logarithms:</div>`;
+            s5Html += `<div style="font-size: 1.25rem;"><strong>PPL = <span class="code-accent" style="font-size: 1.4rem;">${simplePpl.toFixed(3)}</span></strong></div>`;
+            s5Html += `<div style="margin-top: 6px; color: var(--text-muted); font-size: 0.85rem;">Matches the Log Method result exactly!</div>`;
+            simpleStep5Content.innerHTML = s5Html;
+          }
+        }
+
+        // ==========================================
+        // 3. UPDATE "BOTH METHODS MATCH" COMPARISON BOX
+        // ==========================================
+        if (matchLogVal) matchLogVal.textContent = logPpl.toFixed(3);
+        if (matchSimpleVal) {
+          matchSimpleVal.textContent = (hasZeroProb || runningProduct <= 0 || simplePpl === null) 
+            ? 'Undefined (div by 0)' 
+            : simplePpl.toFixed(3);
+        }
+
+        if (matchBadge) {
+          if (simplePpl !== null && Math.abs(logPpl - simplePpl) < 0.0001) {
+            matchBadge.className = 'match-badge';
+            matchBadge.innerHTML = '<span style="font-weight: 700;">✓</span> <span>Results Equal (&Delta; &lt; 0.0001)</span>';
+          } else if (hasZeroProb || runningProduct <= 0) {
+            matchBadge.className = 'match-badge warning';
+            matchBadge.innerHTML = '<span>⚠️</span> <span>Zero Division / Underflow</span>';
+          } else {
+            matchBadge.className = 'match-badge warning';
+            matchBadge.innerHTML = '<span>⚠️</span> <span>Precision Discrepancy</span>';
+          }
+        }
+
+        // ==========================================
+        // 4. UPDATE GAUGE POSITION & READING
+        // ==========================================
+        if (gaugeNeedle && gaugeNeedleLabel && gaugeBadge) {
+          const needlePercent = Math.min(98, Math.max(2, (Math.log(Math.max(1, logPpl)) / Math.log(100)) * 100));
+          gaugeNeedle.style.left = `${needlePercent.toFixed(1)}%`;
+          gaugeNeedleLabel.textContent = logPpl.toFixed(2);
+
+          if (logPpl < 10) {
+            gaugeBadge.innerHTML = `PPL: ${logPpl.toFixed(2)} &bull; <span style="color: #22c55e;">Low / Confident</span>`;
+            gaugeBadge.style.borderColor = '#22c55e';
+            gaugeBadge.style.boxShadow = '0 0 16px rgba(34, 197, 94, 0.3)';
+          } else if (logPpl < 30) {
+            gaugeBadge.innerHTML = `PPL: ${logPpl.toFixed(2)} &bull; <span style="color: #06b6d4;">Moderate / Natural Flow</span>`;
+            gaugeBadge.style.borderColor = '#06b6d4';
+            gaugeBadge.style.boxShadow = '0 0 16px rgba(6, 182, 212, 0.3)';
+          } else {
+            gaugeBadge.innerHTML = `PPL: ${logPpl.toFixed(2)} &bull; <span style="color: #f43f5e;">High / Confused</span>`;
+            gaugeBadge.style.borderColor = '#f43f5e';
+            gaugeBadge.style.boxShadow = '0 0 16px rgba(244, 63, 94, 0.3)';
+          }
+        }
+      };
+
+      // Set initial states
+      setMethod('log');
+      setActiveStep(1);
+    }
+
+    /* ==========================================================================
+       8. Active Navigation Tracking
+       ========================================================================== */
+    function initNavigationTracking() {
+      const sections = document.querySelectorAll('section[id]');
+      const navLinks = document.querySelectorAll('.nav-links .nav-link');
+
+      window.addEventListener('scroll', () => {
+        let currentSectionId = '';
+        const scrollPosition = window.scrollY + 120;
+
+        sections.forEach(section => {
+          const sectionTop = section.offsetTop;
+          const sectionHeight = section.offsetHeight;
+          if (scrollPosition >= sectionTop && scrollPosition < sectionTop + sectionHeight) {
+            currentSectionId = section.getAttribute('id');
+          }
+        });
+
+        navLinks.forEach(link => {
+          link.classList.remove('active');
+          if (link.getAttribute('href') === `#${currentSectionId}`) {
+            link.classList.add('active');
+          }
+        });
+      }, { passive: true });
+    }
+  </script>
+</body>
+</html>
